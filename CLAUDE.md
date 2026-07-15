@@ -93,9 +93,12 @@ cross-device sync would be meaningless.
    activate the target; Windows reveal uses `explorer.exe /select,`. Windows
    **play** opens via `explorer.exe <path>` (ShellExecute — reliable for every
    association incl. UWP "Films & TV"; `Start-Process -PassThru` silently FAILS
-   for those, which broke opening in v1.0.2–1.0.3), then a SEPARATE best-effort
-   PowerShell `AppActivate('<file base name>')` raises the player window by
-   title match. The activate step can never block the open.
+   for those, which broke opening in v1.0.2–1.0.3). A SEPARATE best-effort
+   PowerShell step (`foregroundPs`, passed via `-EncodedCommand` to dodge
+   quoting) then polls up to 8s for the player window (title contains the file's
+   base name) and forces it foreground via the `AttachThreadInput` trick
+   (plain `AppActivate`/`SetForegroundWindow` are blocked for a background
+   process — they only flash the taskbar). Never blocks the open.
 
 ## Notes / gotchas
 

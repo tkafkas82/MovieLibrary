@@ -381,14 +381,14 @@ function launch(p, { reveal }) {
     // Open with the default app via explorer (ShellExecute) — reliable for every
     // association, including UWP apps like "Films & TV" (Start-Process -PassThru
     // silently fails for those). Then, as a SEPARATE best-effort step that can
-    // never block the open, raise the player window matched by the file's name.
+    // never block the open, force the player window to the foreground.
     spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }).unref();
     const base = path.basename(p).replace(/\.[^.]+$/, '');
-    const title = "'" + base.replace(/'/g, "''") + "'";
-    const cmd =
-      "$ErrorActionPreference='SilentlyContinue';Start-Sleep -Milliseconds 1200;" +
-      `try { (New-Object -ComObject WScript.Shell).AppActivate(${title}) | Out-Null } catch {}`;
-    return spawn('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', cmd], { detached: true, stdio: 'ignore' });
+    if (base.length >= 2) {
+      const encoded = Buffer.from(foregroundPs(base), 'utf16le').toString('base64');
+      return spawn('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded], { detached: true, stdio: 'ignore' });
+    }
+    return spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }); // fallback: nothing to focus by
   }
 
   if (plat === 'darwin') {
@@ -397,6 +397,49 @@ function launch(p, { reveal }) {
 
   // linux / other — no universal "select in manager", so reveal opens the dir.
   return spawn('xdg-open', [reveal ? path.dirname(p) : p], { detached: true, stdio: 'ignore' });
+}
+
+// PowerShell that waits for the player's window (title contains the file's
+// name) and forces it to the foreground. Windows blocks a background process
+// from calling SetForegroundWindow, so we attach our thread to the current
+// foreground thread's input first — the documented workaround. Passed to
+// powershell via -EncodedCommand, so `base` needs no shell-escaping.
+function foregroundPs(base) {
+  const lit = "'" + base.replace(/'/g, "''") + "'"; // PS single-quoted literal
+  return `
+$ErrorActionPreference='SilentlyContinue'
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class Fg {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int n);
+  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool f);
+  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+}
+'@
+$base = ${lit}
+$proc = $null
+$deadline = (Get-Date).AddSeconds(8)
+do {
+  Start-Sleep -Milliseconds 300
+  $proc = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like ('*' + $base + '*') } | Select-Object -First 1
+} while (-not $proc -and (Get-Date) -lt $deadline)
+if ($proc) {
+  $h = $proc.MainWindowHandle
+  $fg = [Fg]::GetForegroundWindow()
+  $fgThread = [Fg]::GetWindowThreadProcessId($fg, [IntPtr]::Zero)
+  $me = [Fg]::GetCurrentThreadId()
+  [Fg]::AttachThreadInput($me, $fgThread, $true) | Out-Null
+  [Fg]::ShowWindowAsync($h, 9) | Out-Null   # SW_RESTORE
+  [Fg]::BringWindowToTop($h) | Out-Null
+  [Fg]::SetForegroundWindow($h) | Out-Null
+  [Fg]::AttachThreadInput($me, $fgThread, $false) | Out-Null
+}
+`;
 }
 
 function openHandler(reveal) {
