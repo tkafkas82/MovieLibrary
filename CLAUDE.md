@@ -40,8 +40,13 @@ cross-device sync would be meaningless.
 ## Architecture
 
 - `server.js` — the helper: Express + REST/SSE endpoints; serves `public/`;
-  CORS/PNA middleware + `GET /api/health` (returns `{app:'movielibrary-helper'}`)
-  so a hosted UI can detect it.
+  CORS/PNA middleware + `GET /api/health` (returns
+  `{app:'movielibrary-helper', version}`) so a hosted UI can detect it and warn
+  when it's out of date. `VERSION` is baked in at build time via esbuild
+  `define` (`__APP_VERSION__`), else read from package.json in dev. The UI
+  (`checkForUpdate` in app.js) compares it to the latest GitHub release tag and
+  shows an "update" chip if behind. Keep package.json `version` in sync with the
+  release tag you push.
 - `lib/scan.js` — recursive disk walk (`scanRoots`); skips system/junk dirs,
   swallows EACCES. Follows directory junctions/symlinks (resolves via `stat`)
   with a `visited` realpath set to prevent loops. `listDrives()` suggests roots

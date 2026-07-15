@@ -18,6 +18,7 @@ import path from 'node:path';
 
 const BUNDLE = 'build/helper.cjs';
 const OUT = 'dist';
+const VERSION = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 
 // pkg target → output filename. node22 has prebuilt base binaries for every
 // target (node18 does not in current pkg, and would try to compile from
@@ -38,6 +39,7 @@ await build({
   target: 'node18',
   outfile: BUNDLE,
   logLevel: 'error', // ignore express's optional dynamic-require warnings
+  define: { __APP_VERSION__: JSON.stringify(VERSION) }, // baked-in version for /api/health
 });
 console.log(`  ✓ ${BUNDLE}`);
 

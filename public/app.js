@@ -8,6 +8,7 @@ const state = {
   filters: { q: '', genre: '', sort: 'rating', minRating: 0, onlyUnmatched: false },
   stream: null,
   connected: false,
+  helperVersion: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -33,13 +34,14 @@ const api = async (path, opts) => {
   return res.json();
 };
 
-// Confirm the helper is up (and is actually ours) before using it.
-async function pingHelper() {
+// Fetch the helper's health/identity (and version). Returns the object if it's
+// really our helper, else null.
+async function getHealth() {
   try {
     const r = await fetch(H('/api/health'), { cache: 'no-store' });
     const j = await r.json();
-    return j && j.app === 'movielibrary-helper';
-  } catch { return false; }
+    return (j && j.app === 'movielibrary-helper') ? j : null;
+  } catch { return null; }
 }
 
 // ── init ────────────────────────────────────────────────────────────────
@@ -119,8 +121,10 @@ function hideSplash() {
 // Establish (or re-establish) the link to the local helper, then load data.
 // Shows a friendly offline screen when the helper isn't reachable.
 async function connect() {
-  const ok = SERVED_LOCALLY || await pingHelper();
+  const health = await getHealth();
+  const ok = SERVED_LOCALLY || !!health;
   state.connected = ok;
+  state.helperVersion = (health && health.version) || null;
   setHelperStatus(ok);
   if (!ok) { showHelperOffline(true); return; }
   showHelperOffline(false);
@@ -129,10 +133,37 @@ async function connect() {
     await loadLibrary();
     // A sign-in that happened before the helper was up left settings waiting.
     if (pendingCloudApply) { const c = pendingCloudApply; pendingCloudApply = null; await applyCloudToHelper(c); }
+    checkForUpdate();
   } catch {
     state.connected = false;
     setHelperStatus(false);
     showHelperOffline(true);
+  }
+}
+
+// Compare the connected helper's version against the latest GitHub release and,
+// if it's behind, surface an "update" chip + a one-time toast.
+function cmpSemver(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
+  return 0;
+}
+
+async function checkForUpdate() {
+  const cur = state.helperVersion;
+  if (!cur || cur === 'dev') return; // unknown/older helper or local dev — skip
+  const tag = await fetchLatestTag();
+  if (!tag) return;
+  if (cmpSemver(tag.replace(/^v/, ''), cur) > 0) {
+    const chip = $('updateChip');
+    if (chip) {
+      chip.hidden = false;
+      chip.textContent = `⬆ Update helper → ${tag}`;
+      chip.href = `https://github.com/${GH_REPO}/releases/latest`;
+      chip.title = `Your helper is v${cur}. Newer: ${tag}. Click for the download.`;
+    }
+    toast(`A newer helper is available (${tag}). You're on v${cur}.`);
   }
 }
 

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 import { scanRoots, listDrives } from './lib/scan.js';
 import { parseEntry, seriesKeyOf } from './lib/parse.js';
@@ -23,6 +24,13 @@ try { __dirname = path.dirname(fileURLToPath(import.meta.url)); }
 catch { __dirname = path.dirname(process.execPath); }
 const PORT = Number(process.env.PORT) || 4700;
 const IS_PACKAGED = !!(process.pkg || process.versions.pkg);
+
+// App version: baked in at build time (esbuild `define` in build.mjs); in dev
+// (plain `node server.js`) it's read from package.json. `typeof` guard keeps
+// the reference safe when __APP_VERSION__ isn't defined.
+const VERSION = (typeof __APP_VERSION__ !== 'undefined') ? __APP_VERSION__ : (() => {
+  try { return createRequire(import.meta.url)('./package.json').version; } catch { return 'dev'; }
+})();
 
 // Locate the static UI (`public/`). In dev it sits beside this file. As a
 // packaged binary the snapshot is read-only, so we look for a `public/` folder
@@ -67,7 +75,7 @@ if (PUBLIC_DIR) app.use(express.static(PUBLIC_DIR));
 
 // Lightweight identity/health probe so a remotely-hosted UI can confirm this
 // is actually the MovieLibrary helper (and reachable) before using it.
-app.get('/api/health', (_req, res) => res.json({ app: 'movielibrary-helper', ok: true }));
+app.get('/api/health', (_req, res) => res.json({ app: 'movielibrary-helper', ok: true, version: VERSION }));
 
 // ── helpers ─────────────────────────────────────────────────────────────
 function sse(res) {
@@ -423,7 +431,7 @@ function openBrowser(url) {
 
 app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
-  console.log(`\n  🎬  MKV Movie Library helper running at ${url}`);
+  console.log(`\n  🎬  MKV Movie Library helper v${VERSION} running at ${url}`);
   if (PUBLIC_DIR) {
     console.log('      • Local app is served here — open the URL above, or');
     console.log('      • open your hosted (Vercel) UI; it will connect to this helper.\n');
