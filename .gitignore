@@ -3,3 +3,7 @@ data/config.json
 data/library.json
 data/*.tmp
 npm-debug.log*
+
+# build artifacts (standalone binaries)
+build/
+dist/

@@ -6,9 +6,14 @@
   "private": true,
   "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "node build.mjs"
   },
   "dependencies": {
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "@yao-pkg/pkg": "^6.21.0"
   }
 }

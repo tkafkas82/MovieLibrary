@@ -10,17 +10,66 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-const api = async (url, opts) => {
-  const res = await fetch(url, opts);
+
+// ── helper connection ─────────────────────────────────────────────────────
+// The disk work lives in a small local "helper" (server.js) on the user's PC.
+// When this page is served BY that helper (localhost), calls are same-origin.
+// When served from a static host (Vercel/https), calls go cross-origin to the
+// helper's localhost address, which the user can override (e.g. a custom port).
+const DEFAULT_HELPER = 'http://localhost:4700';
+const SERVED_LOCALLY = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+
+function helperBase() {
+  if (SERVED_LOCALLY) return ''; // same-origin — the helper is serving this page
+  return (localStorage.getItem('helperUrl') || DEFAULT_HELPER).replace(/\/+$/, '');
+}
+// Prefix an /api/… path with the helper base.
+const H = (p) => helperBase() + p;
+
+const api = async (path, opts) => {
+  const res = await fetch(H(path), opts);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 };
 
+// Confirm the helper is up (and is actually ours) before using it.
+async function pingHelper() {
+  try {
+    const r = await fetch(H('/api/health'), { cache: 'no-store' });
+    const j = await r.json();
+    return j && j.app === 'movielibrary-helper';
+  } catch { return false; }
+}
+
 // ── init ────────────────────────────────────────────────────────────────
 async function init() {
   wireEvents();
-  await loadConfig();
-  await loadLibrary();
+  registerServiceWorker();
+  await connect();
+  hideSplash();
+}
+
+function hideSplash() {
+  const s = $('splash');
+  if (!s) return;
+  s.classList.add('gone');
+  setTimeout(() => { s.hidden = true; }, 600);
+}
+
+// Establish (or re-establish) the link to the local helper, then load data.
+// Shows a friendly offline screen when the helper isn't reachable.
+async function connect() {
+  const ok = SERVED_LOCALLY || await pingHelper();
+  setHelperStatus(ok);
+  if (!ok) { showHelperOffline(true); return; }
+  showHelperOffline(false);
+  try {
+    await loadConfig();
+    await loadLibrary();
+  } catch {
+    setHelperStatus(false);
+    showHelperOffline(true);
+  }
 }
 
 async function loadConfig() { state.config = await api('/api/config'); }
@@ -293,14 +342,14 @@ async function onSeriesModalClick(e) {
   else if (act === 'reveal') post('/api/reveal', { path });
 }
 
-const post = (url, body) => fetch(url, {
+const post = (url, body) => fetch(H(url), {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 }).catch(() => {});
 
 // ── scan / enrich (SSE) ────────────────────────────────────────────────────
 function startStream(url, { onEvent, label }) {
   if (state.stream) state.stream.close();
-  const es = new EventSource(url);
+  const es = new EventSource(H(url));
   state.stream = es;
   showProgress(true, label, true);
   es.onmessage = (ev) => { let d; try { d = JSON.parse(ev.data); } catch { return; } onEvent(d, es); };
@@ -407,10 +456,73 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ── helper status / offline screen ────────────────────────────────────────
+function setHelperStatus(ok) {
+  const pill = $('helperPill');
+  if (!pill) return;
+  // Only meaningful when the UI is hosted remotely; hide it in local mode.
+  pill.hidden = SERVED_LOCALLY;
+  pill.classList.toggle('ok', ok);
+  pill.classList.toggle('off', !ok);
+  pill.textContent = ok ? '● Helper connected' : '● Helper offline';
+}
+
+function showHelperOffline(show) {
+  const el = $('helperOffline');
+  if (el) el.hidden = !show;
+  // Hide the main workspace while offline so the setup screen is the focus.
+  document.body.classList.toggle('offline', !!show);
+  if (show) {
+    const input = $('helperUrlInput');
+    if (input) input.value = localStorage.getItem('helperUrl') || DEFAULT_HELPER;
+  }
+}
+
+// ── PWA: service worker + install prompt ──────────────────────────────────
+let deferredInstall = null;
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    const btn = $('installBtn');
+    if (btn) btn.hidden = false;
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstall = null;
+    const btn = $('installBtn');
+    if (btn) btn.hidden = true;
+    toast('App installed. Launch it any time from your Start menu / dock.');
+  });
+}
+
+async function promptInstall() {
+  if (!deferredInstall) {
+    toast('Use your browser menu → “Install app” to add it (or it may already be installed).');
+    return;
+  }
+  deferredInstall.prompt();
+  await deferredInstall.userChoice.catch(() => {});
+  deferredInstall = null;
+  const btn = $('installBtn');
+  if (btn) btn.hidden = true;
+}
+
 function wireEvents() {
   $('scanBtn').onclick = startScan;
   $('enrichBtn').onclick = startEnrich;
   $('settingsBtn').onclick = openSettings;
+  $('installBtn').onclick = promptInstall;
+
+  // Offline / helper-connection screen.
+  $('helperRetry').onclick = () => {
+    const v = $('helperUrlInput').value.trim();
+    if (v) localStorage.setItem('helperUrl', v.replace(/\/+$/, ''));
+    connect();
+  };
+  $('helperPill').onclick = () => { if (!SERVED_LOCALLY) showHelperOffline(true); };
   $('settingsCancel').onclick = closeSettings;
   $('settingsSave').onclick = saveSettings;
   $('clearLibBtn').onclick = clearLibrary;

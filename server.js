@@ -3,6 +3,7 @@
 // OMDb (IMDb data), caches to data/library.json, and serves a poster-grid UI.
 
 import express from 'express';
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -15,12 +16,58 @@ import {
   loadLibrary, saveLibrary, idForPath, pathForId,
 } from './lib/store.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Real ESM in dev; undefined inside the packaged/bundled binary (which resolves
+// its paths from process.execPath instead), so keep this non-fatal.
+let __dirname;
+try { __dirname = path.dirname(fileURLToPath(import.meta.url)); }
+catch { __dirname = path.dirname(process.execPath); }
 const PORT = Number(process.env.PORT) || 4700;
+const IS_PACKAGED = !!(process.pkg || process.versions.pkg);
+
+// Locate the static UI (`public/`). In dev it sits beside this file. As a
+// packaged binary the snapshot is read-only, so we look for a `public/` folder
+// on the real disk next to the executable. If none exists, the binary still
+// runs perfectly as an API-only helper for a remotely-hosted (Vercel) UI.
+function resolvePublicDir() {
+  const candidates = IS_PACKAGED
+    ? [path.join(path.dirname(process.execPath), 'public'), path.join(__dirname, 'public')]
+    : [path.join(__dirname, 'public')];
+  return candidates.find((d) => { try { return fs.existsSync(d); } catch { return false; } }) || null;
+}
+const PUBLIC_DIR = resolvePublicDir();
 
 const app = express();
+
+// ── CORS / Private Network Access ─────────────────────────────────────────
+// This process is the *local helper*: it runs on the user's PC and does the
+// disk work (scan, enrich, open/reveal) that a cloud server never could. The
+// UI may be served from here (http://localhost:PORT) OR from a static host
+// like Vercel (https://…vercel.app). In the latter case the page makes
+// cross-origin requests to this helper, so we must:
+//   1. echo an allowed CORS origin, and
+//   2. answer the Chrome "Private Network Access" preflight, which a public
+//      (https) page needs before it may call a private address (localhost).
+// ALLOW_ORIGIN can pin a single origin; default reflects the caller (fine here
+// because the helper only ever exposes the user's own machine to their own
+// browser tab, and no cookies/credentials are involved).
+const ALLOW_ORIGIN = process.env.ALLOW_ORIGIN || '';
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN || origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+if (PUBLIC_DIR) app.use(express.static(PUBLIC_DIR));
+
+// Lightweight identity/health probe so a remotely-hosted UI can confirm this
+// is actually the MovieLibrary helper (and reachable) before using it.
+app.get('/api/health', (_req, res) => res.json({ app: 'movielibrary-helper', ok: true }));
 
 // ── helpers ─────────────────────────────────────────────────────────────
 function sse(res) {
@@ -309,35 +356,64 @@ app.post('/api/rematch', async (req, res) => {
   res.json({ ok: true, info: r.info });
 });
 
-// ── open / reveal in Explorer ─────────────────────────────────────────────
-app.post('/api/open', (req, res) => {
-  const { path: p } = req.body || {};
-  if (!p) return res.status(400).json({ error: 'path required' });
-  try {
-    spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }).unref();
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+// ── open / reveal (cross-platform) ────────────────────────────────────────
+// Launch a file in the OS default app, or reveal it in the file manager.
+// Windows: explorer.exe / explorer.exe /select,  ·  macOS: open / open -R  ·
+// Linux: xdg-open (reveal falls back to opening the containing folder).
+function launch(p, { reveal }) {
+  const plat = process.platform;
+  if (plat === 'win32') {
+    // explorer often exits non-zero even on success — fire and forget.
+    return spawn('explorer.exe', reveal ? ['/select,' + p] : [p], { detached: true, stdio: 'ignore' });
   }
-});
+  if (plat === 'darwin') {
+    return spawn('open', reveal ? ['-R', p] : [p], { detached: true, stdio: 'ignore' });
+  }
+  // linux / other — no universal "select in manager", so reveal opens the dir.
+  return spawn('xdg-open', [reveal ? path.dirname(p) : p], { detached: true, stdio: 'ignore' });
+}
 
-app.post('/api/reveal', (req, res) => {
-  const { path: p } = req.body || {};
-  if (!p) return res.status(400).json({ error: 'path required' });
-  try {
-    // explorer often exits with code 1 even on success — fire and forget.
-    spawn('explorer.exe', ['/select,' + p], { detached: true, stdio: 'ignore' }).unref();
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+function openHandler(reveal) {
+  return (req, res) => {
+    const { path: p } = req.body || {};
+    if (!p) return res.status(400).json({ error: 'path required' });
+    try {
+      launch(p, { reveal }).unref();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  };
+}
+
+app.post('/api/open', openHandler(false));
+app.post('/api/reveal', openHandler(true));
 
 // Clean JSON errors (e.g. malformed request body) instead of HTML stack traces.
 app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ error: err.message || 'Server error' });
 });
 
+// Best-effort "open my default browser at this URL", cross-platform.
+function openBrowser(url) {
+  try {
+    const plat = process.platform;
+    if (plat === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+    else if (plat === 'darwin') spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+    else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+  } catch { /* ignore — just print the URL */ }
+}
+
 app.listen(PORT, () => {
-  console.log(`\n  🎬  MKV Movie Library running at http://localhost:${PORT}\n`);
+  const url = `http://localhost:${PORT}`;
+  console.log(`\n  🎬  MKV Movie Library helper running at ${url}`);
+  if (PUBLIC_DIR) {
+    console.log('      • Local app is served here — open the URL above, or');
+    console.log('      • open your hosted (Vercel) UI; it will connect to this helper.\n');
+    // Auto-open the local UI (skip with MOVIELIB_NO_OPEN=1).
+    if (!process.env.MOVIELIB_NO_OPEN) openBrowser(url);
+  } else {
+    console.log('      • API-only helper (no local UI folder found).');
+    console.log('      • Open your hosted (Vercel) UI; it will connect to this helper.\n');
+  }
 });

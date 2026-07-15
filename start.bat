@@ -2,9 +2,14 @@
 setlocal
 cd /d "%~dp0"
 
-REM ---- MKV Movie Library launcher ----
-REM First run installs dependencies (only Express). Then starts the server
-REM and opens the library in your default browser.
+REM ---- MKV Movie Library helper launcher ----
+REM First run installs dependencies (only Express). Then starts the local
+REM helper (disk scanning + IMDb + open/reveal) and opens the library.
+REM
+REM Two ways to use it:
+REM   * Open the local URL this opens (works fully offline, any browser), OR
+REM   * leave this window running and open your hosted (Vercel) UI in Chrome/
+REM     Edge — it will connect to this helper automatically.
 
 set PORT=4700
 if not "%~1"=="" set PORT=%~1
@@ -26,8 +31,8 @@ if not exist "node_modules" (
   )
 )
 
-echo Starting MKV Movie Library on http://localhost:%PORT%
-start "" "http://localhost:%PORT%"
+echo Starting MKV Movie Library helper on http://localhost:%PORT%
+echo (Leave this window open. Close it to stop the helper.)
 set PORT=%PORT%
 node server.js
 

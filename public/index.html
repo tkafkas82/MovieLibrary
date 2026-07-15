@@ -2,19 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>MKV Movie Library</title>
+  <meta name="description" content="Your personal movie & series library, matched to IMDb." />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0d1117" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icons/icon.svg" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Movie Library" />
+
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <!-- Branded splash — shown on load, fades out once the app is ready -->
+  <div id="splash" class="splash">
+    <div class="splash-inner">
+      <div class="splash-logo">🎬</div>
+      <div class="splash-title">Movie Library</div>
+      <div class="splash-sub">Your films & series, matched to IMDb</div>
+      <div class="splash-spinner"></div>
+    </div>
+  </div>
   <header class="topbar">
     <div class="brand">🎬 <span>MKV Movie Library</span></div>
     <div class="stats" id="stats"></div>
+    <button class="helper-pill" id="helperPill" hidden title="Local helper connection — click to reconfigure"></button>
     <div class="spacer"></div>
     <button class="btn" id="scanBtn">Scan disks</button>
     <button class="btn" id="enrichBtn">Fetch IMDb</button>
+    <button class="btn ghost" id="installBtn" hidden title="Install as an app">⬇ Install</button>
     <button class="btn ghost" id="settingsBtn">⚙ Settings</button>
   </header>
+
+  <!-- Helper-offline setup screen (only when the UI is hosted remotely and the
+       local helper isn't reachable) -->
+  <div class="helper-offline" id="helperOffline" hidden>
+    <div class="offline-card">
+      <div class="offline-icon">🔌</div>
+      <h2>Start the Movie Library helper on this PC</h2>
+      <p>
+        This page runs in the cloud, but scanning your disks and opening files
+        can only happen on <b>your</b> computer. A tiny local helper does that
+        work. It isn't running (or isn't reachable) right now.
+      </p>
+      <ol class="offline-steps">
+        <li>Download / copy the <code>MovieLibrary</code> helper folder to this PC.</li>
+        <li>Double-click <code>start.bat</code> (needs <a href="https://nodejs.org" target="_blank" rel="noreferrer">Node 18+</a>).</li>
+        <li>Leave that window open, then click <b>Retry</b> below.</li>
+      </ol>
+      <label class="field-label">Helper address <span class="hint">(change only if you used a custom port)</span></label>
+      <div class="offline-row">
+        <input type="text" id="helperUrlInput" placeholder="http://localhost:4700" />
+        <button class="btn" id="helperRetry">Retry</button>
+      </div>
+    </div>
+  </div>
 
   <div class="progress" id="progress" hidden>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>

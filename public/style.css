@@ -184,3 +184,61 @@ a { color: var(--accent-2); }
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
   .progress-text { max-width: 40vw; min-width: 0; }
 }
+
+/* ── PWA splash ──────────────────────────────────────────────────────────── */
+.splash {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 120% at 50% 30%, #1b2536 0%, var(--bg) 70%);
+  transition: opacity .5s ease, visibility .5s ease;
+}
+.splash.gone { opacity: 0; visibility: hidden; }
+.splash-inner { text-align: center; animation: splash-pop .6s ease both; }
+.splash-logo { font-size: 4.5rem; line-height: 1; filter: drop-shadow(0 6px 18px rgba(0,0,0,.5)); }
+.splash-title { margin-top: 14px; font-size: 1.7rem; font-weight: 800; letter-spacing: .3px; }
+.splash-sub { margin-top: 6px; color: var(--muted); font-size: .95rem; }
+.splash-spinner {
+  margin: 26px auto 0; width: 34px; height: 34px; border-radius: 50%;
+  border: 3px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes splash-pop { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+
+/* ── helper connection pill ──────────────────────────────────────────────── */
+.helper-pill {
+  border: 1px solid var(--border); background: var(--bg-3); color: var(--muted);
+  padding: 4px 10px; border-radius: 999px; font-size: .78em; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+}
+.helper-pill.ok { color: #7ee787; border-color: #2a4a35; }
+.helper-pill.off { color: var(--danger); border-color: #4a2a2a; }
+
+/* ── helper offline / setup screen ───────────────────────────────────────── */
+.helper-offline {
+  position: fixed; inset: 56px 0 0 0; z-index: 30;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 18px; overflow: auto;
+  background: var(--bg);
+}
+/* When offline, keep the setup screen the focus. */
+body.offline .toolbar, body.offline #grid, body.offline #empty { display: none !important; }
+.offline-card {
+  max-width: 560px; width: 100%;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
+  padding: 30px 30px 26px; box-shadow: 0 12px 40px rgba(0,0,0,.4);
+}
+.offline-icon { font-size: 2.6rem; }
+.offline-card h2 { margin: 8px 0 10px; font-size: 1.3rem; }
+.offline-card p { color: var(--muted); margin: 0 0 14px; }
+.offline-steps { color: var(--text); margin: 0 0 18px; padding-left: 20px; }
+.offline-steps li { margin: 6px 0; }
+.offline-card code {
+  background: var(--bg-3); border: 1px solid var(--border);
+  padding: 1px 6px; border-radius: 6px; font-size: .88em;
+}
+.offline-row { display: flex; gap: 10px; margin-top: 6px; }
+.offline-row input {
+  flex: 1; background: var(--bg-3); border: 1px solid var(--border);
+  color: var(--text); border-radius: 8px; padding: 9px 12px; font-size: .9em;
+}

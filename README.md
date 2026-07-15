@@ -1,6 +1,6 @@
 # 🎬 MKV Movie Library
 
-A **local** web app that scans your disks for movie files, pulls IMDb details for each one, and serves a fast, searchable **poster-grid library** in your browser — all running entirely on your own machine.
+A web app that scans your disks for movie files, pulls IMDb details for each one, and serves a fast, searchable **poster-grid library** in your browser. It's an **installable PWA** you can run fully locally **or** host the UI in the cloud (Vercel) while a tiny local helper does the disk work on each PC.
 
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)
@@ -19,7 +19,9 @@ A **local** web app that scans your disks for movie files, pulls IMDb details fo
 - **🖼️ Poster-grid UI** — a responsive, searchable library that renders straight from a local cache. Zero build step, plain HTML/CSS/JS.
 - **▶️ Open & reveal** — launch a movie in your default player or reveal it in Explorer, right from the browser.
 - **⚡ Live progress** — scanning and enrichment stream progress over Server-Sent Events, so you watch the library fill in real time.
-- **🔒 Local-first** — everything (files, config, cache, API key) stays on your machine. No cloud, no deploy, no telemetry.
+- **📲 Installable PWA** — install it as a standalone app (its own window, icon, and splash screen) from Chrome/Edge, on desktop or mobile.
+- **☁️ Host the UI, keep the data local** — deploy the UI to Vercel and open it from any PC; a small local **helper** does the disk scanning and file-opening on that machine. Your files never leave your computer.
+- **🔒 Local-first** — files, config, cache, and API key always stay on your machine. The cloud only ever serves static HTML/CSS/JS; it never sees your disks.
 
 ---
 
@@ -37,7 +39,15 @@ npm start
 
 Then open **http://localhost:4700**.
 
-On Windows you can also just double-click **`start.bat`** — it installs deps on first run, starts the server, and opens the browser. Pass a port to override: `start.bat 4800`.
+`npm start` works on **Windows, macOS, and Linux** (Node is the only requirement). For one-click launchers that also install deps on first run and open your browser:
+
+| OS | Launcher | Custom port |
+| --- | --- | --- |
+| Windows | double-click **`start.bat`** | `start.bat 4800` |
+| macOS | double-click **`start.command`** (or `./start.sh`) | `./start.sh 4800` |
+| Linux | `./start.sh` | `./start.sh 4800` |
+
+> On macOS/Linux, make the scripts executable once: `chmod +x start.sh start.command`.
 
 ### First-run setup (in the app)
 
@@ -47,6 +57,84 @@ On Windows you can also just double-click **`start.bat`** — it installs deps o
 4. **Scan** to index your files, then **Fetch IMDb** to enrich them.
 
 Scanning and browsing work without a key — you only need one for IMDb details/posters.
+
+---
+
+## ☁️ Host the UI on Vercel (run from any PC)
+
+A cloud server **cannot** see your PC's disks or launch your video player — so the disk work has to run on your machine. This app splits cleanly in two:
+
+- **UI** — static files in `public/`. Host them anywhere (Vercel), open from any PC.
+- **Helper** — `server.js` running on *your* PC (`http://localhost:4700`). It does the scanning, IMDb lookups, and open/reveal. The hosted UI talks to it over your local network loopback (CORS + Private Network Access are handled for you).
+
+```
+   Any PC's browser                    That same PC
+┌──────────────────────┐        ┌───────────────────────────┐
+│  UI  (Vercel, HTTPS)  │ ─────▶ │  Helper (localhost:4700)   │
+│  poster grid, PWA     │  API   │  scan · OMDb · open/reveal │
+└──────────────────────┘        └──────────────┬────────────┘
+                                                ▼  your disks
+```
+
+### Deploy the UI
+
+```bash
+npm i -g vercel        # once
+vercel                 # from the project root — deploys the static public/ folder
+vercel --prod          # promote to your production URL
+```
+
+`vercel.json` already pins it to a **pure static** deploy of `public/` (no build, no server). You'll get a URL like `https://your-movies.vercel.app`.
+
+### Run the helper on each PC
+
+The helper is cross-platform (Node runs on Windows, macOS, and Linux) and OS-aware — open/reveal uses `explorer` on Windows, `open`/`open -R` on macOS, and `xdg-open` on Linux.
+
+1. Copy this project folder to the PC.
+2. Start the helper and leave it running:
+   - **Windows:** double-click `start.bat`
+   - **macOS:** double-click `start.command`
+   - **Linux / any:** `./start.sh` (or `npm start`)
+3. Open your Vercel URL in **Chrome or Edge**. It auto-detects the helper and unlocks scanning/playback. If the helper isn't running, a friendly setup screen walks you through it (and lets you point at a custom port).
+
+> **Browser support:** the hosted-UI → localhost-helper link works in **Chrome/Edge** (and Chromium browsers). Opening the helper's own URL (`http://localhost:4700`) directly works in any browser and needs no cloud at all.
+
+### 🧱 Standalone binaries (no Node needed on the target PC)
+
+Prefer not to install Node on every machine? Build self-contained executables that bundle the Node runtime. From a machine that *does* have Node:
+
+```bash
+npm install       # once, pulls the build tooling (esbuild + @yao-pkg/pkg)
+npm run build     # cross-compiles all targets into ./dist
+```
+
+`build.mjs` bundles the ESM source into one file (esbuild) and wraps it in a Node runtime for each OS (pkg). You get, in `dist/`:
+
+| File | Runs on |
+| --- | --- |
+| `movielibrary-helper-win-x64.exe` | Windows (x64) |
+| `movielibrary-helper-macos-x64` | Intel Macs |
+| `movielibrary-helper-macos-arm64` | Apple-Silicon Macs |
+| `movielibrary-helper-linux-x64` | Linux (x64) |
+| `public/` | the UI, copied alongside |
+
+**Distribute:**
+- **Vercel-hybrid mode** — ship just the one binary. Double-click it; it runs as an API-only helper and your hosted UI connects to it.
+- **Fully local mode** — ship the binary **and** the `public/` folder together (keep them in the same directory). The binary then also serves the local app and opens your browser to it.
+
+The binary writes its cache to a `data/` folder **next to the executable**, so keep it somewhere writable.
+
+> **macOS gatekeeper:** binaries cross-built off a Mac are unsigned, so macOS will quarantine them. On the Mac, run once:
+> ```bash
+> xattr -dr com.apple.quarantine ./movielibrary-helper-macos-arm64
+> codesign --sign - ./movielibrary-helper-macos-arm64   # ad-hoc signature
+> chmod +x ./movielibrary-helper-macos-arm64
+> ```
+> (On Linux, `chmod +x` the binary before running.)
+
+### 📲 Install as an app
+
+Open the UI in Chrome/Edge and click **⬇ Install** in the header (or use the browser's install prompt). You get a standalone window with its own icon and splash screen. Works on the Vercel URL and on `localhost` alike.
 
 ---
 
@@ -91,15 +179,26 @@ Express server  (server.js)
 
 ```
 MovieLibrary/
-├─ server.js          # Express server + REST/SSE endpoints
+├─ server.js              # the local HELPER — Express + REST/SSE + CORS/PNA
 ├─ lib/
-│  ├─ scan.js         # recursive disk walk
-│  ├─ parse.js        # filename → title/year (scene-tag stripping)
-│  ├─ omdb.js         # OMDb/IMDb lookups
-│  └─ store.js        # JSON persistence under data/
-├─ public/            # vanilla-JS SPA (index.html, style.css, app.js)
-├─ data/              # config + library cache (git-ignored)
-├─ start.bat          # Windows launcher (install + run + open browser)
+│  ├─ scan.js             # recursive disk walk
+│  ├─ parse.js            # filename → title/year (scene-tag stripping)
+│  ├─ omdb.js             # OMDb/IMDb lookups
+│  └─ store.js            # JSON persistence under data/
+├─ public/                # the UI — static PWA (deployed to Vercel)
+│  ├─ index.html          # shell + splash + offline setup screen
+│  ├─ app.js              # SPA logic + helper detection + install prompt
+│  ├─ style.css
+│  ├─ manifest.webmanifest
+│  ├─ sw.js               # service worker (caches the app shell)
+│  └─ icons/              # SVG app icons (standard + maskable)
+├─ data/                  # config + library cache (git-ignored, helper-side)
+├─ vercel.json            # pins a pure-static deploy of public/
+├─ build.mjs              # esbuild bundle → pkg cross-compile (npm run build)
+├─ start.bat              # Windows launcher for the helper
+├─ start.sh              # macOS/Linux launcher
+├─ start.command         # double-clickable macOS launcher
+├─ dist/                  # built binaries + public/ (git-ignored)
 └─ package.json
 ```
 
