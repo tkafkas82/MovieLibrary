@@ -10,13 +10,9 @@
 // client code. Real protection comes from the Firestore rules + the list of
 // authorized domains in the Firebase console. So it's fine to commit this file.
 // ─────────────────────────────────────────────────────────────────────────
-window.FIREBASE_CONFIG = null;
-
-/* Example — replace every value with your project's, then redeploy:
 window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  appId: "1:1234567890:web:abcdef1234567890"
+ apiKey: "AIzaSyDXBexYYqfFnKD4A7sHaAjo2Su81x5ma6Y",
+  authDomain: "mymovielibrary-5cc8d.firebaseapp.com",
+  projectId: "mymovielibrary-5cc8d",
+  appId: "1:707195274916:web:743c37c5d1187597bb8831"
 };
-*/
