@@ -267,3 +267,11 @@ body.offline .toolbar, body.offline #grid, body.offline #empty { display: none !
   font-size: .8em; color: var(--muted); max-width: 200px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ── inline button spinner (Play "Opening…") ─────────────────────────────── */
+.spin {
+  display: inline-block; width: 12px; height: 12px; vertical-align: -2px;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  opacity: .8; animation: spin .7s linear infinite;
+}
+.iconbtn.loading { opacity: .85; cursor: progress; }

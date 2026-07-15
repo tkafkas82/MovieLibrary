@@ -342,7 +342,7 @@ async function onGridClick(e) {
   const m = state.movies.find((x) => x.id === cardEl.dataset.id);
   if (!m) return;
   const act = btn.dataset.act;
-  if (act === 'play') post('/api/open', { path: m.path });
+  if (act === 'play') playFile(btn, m.path, m.imdb?.title || m.title || m.fileName);
   else if (act === 'reveal') post('/api/reveal', { path: m.path });
   else if (act === 'rematch') {
     const r = await rematch({ kind: 'movie', id: m.id });
@@ -400,15 +400,49 @@ async function onSeriesModalClick(e) {
   if (!epEl) return;
   const id = epEl.dataset.id;
   let path = null;
-  for (const s of state.series) for (const sea of s.seasons) { const ep = sea.episodes.find((x) => x.id === id); if (ep) path = ep.path; }
+  let fileName = null;
+  for (const s of state.series) for (const sea of s.seasons) { const ep = sea.episodes.find((x) => x.id === id); if (ep) { path = ep.path; fileName = ep.fileName; } }
   if (!path) return;
-  if (act === 'play') post('/api/open', { path });
+  if (act === 'play') playFile(btn, path, fileName);
   else if (act === 'reveal') post('/api/reveal', { path });
 }
 
 const post = (url, body) => fetch(H(url), {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 }).catch(() => {});
+
+// Launch a file in the default player, showing a spinner on the clicked button
+// until it opens. We can't observe the native player window from the browser,
+// so we hold the "Opening…" state for a short minimum so it reads as launching,
+// and report a clear error if the helper couldn't start it.
+async function playFile(btn, path, title) {
+  if (!btn) { post('/api/open', { path }); return; }
+  if (btn.dataset.loading) return; // ignore repeat clicks while opening
+  btn.dataset.loading = '1';
+  const orig = btn.innerHTML;
+  const tiny = btn.classList.contains('tiny');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.innerHTML = tiny ? '<span class="spin"></span>' : '<span class="spin"></span> Opening…';
+
+  const started = Date.now();
+  let ok = true;
+  try {
+    const res = await fetch(H('/api/open'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Could not open the file'); }
+  } catch (err) {
+    ok = false;
+    toast('Could not open the file: ' + (err.message || err));
+  }
+
+  const MIN_MS = 1600;
+  setTimeout(() => {
+    btn.innerHTML = orig; btn.disabled = false; btn.classList.remove('loading'); delete btn.dataset.loading;
+    if (ok) toast(`Opening${title ? ` “${title}”` : ''} in your player…`);
+  }, Math.max(0, MIN_MS - (Date.now() - started)));
+}
 
 // ── scan / enrich (SSE) ────────────────────────────────────────────────────
 function startStream(url, { onEvent, label }) {
