@@ -46,19 +46,29 @@
       <h2>Start the Movie Library helper on this PC</h2>
       <p>
         This page runs in the cloud, but scanning your disks and opening files
-        can only happen on <b>your</b> computer. A tiny local helper does that
-        work. It isn't running (or isn't reachable) right now.
+        can only happen on <b>your</b> computer. Download the tiny helper below,
+        run it, and this page connects to it automatically. No install needed.
       </p>
+
+      <!-- One-click download of the standalone helper for the visitor's OS -->
+      <div class="download-box" id="helperDownload"></div>
+      <details class="run-help" id="runHelp"></details>
+
       <ol class="offline-steps">
-        <li>Download / copy the <code>MovieLibrary</code> helper folder to this PC.</li>
-        <li>Double-click <code>start.bat</code> (needs <a href="https://nodejs.org" target="_blank" rel="noreferrer">Node 18+</a>).</li>
-        <li>Leave that window open, then click <b>Retry</b> below.</li>
+        <li>Download the helper above and run it (double-click on Windows).</li>
+        <li>Leave its window open.</li>
+        <li>Click <b>Retry</b>.</li>
       </ol>
+
       <label class="field-label">Helper address <span class="hint">(change only if you used a custom port)</span></label>
       <div class="offline-row">
         <input type="text" id="helperUrlInput" placeholder="http://localhost:4700" />
         <button class="btn" id="helperRetry">Retry</button>
       </div>
+      <p class="offline-alt">
+        Rather run from source, or want the build that also serves this UI offline?
+        See the <a id="readmeLink" href="#" target="_blank" rel="noreferrer">README</a>.
+      </p>
     </div>
   </div>
 

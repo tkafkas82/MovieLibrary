@@ -475,7 +475,53 @@ function showHelperOffline(show) {
   if (show) {
     const input = $('helperUrlInput');
     if (input) input.value = localStorage.getItem('helperUrl') || DEFAULT_HELPER;
+    renderDownloads();
   }
+}
+
+// ── download the standalone helper (from GitHub Releases) ─────────────────
+const GH_REPO = 'tkafkas82/MovieLibrary';
+const DL_BASE = `https://github.com/${GH_REPO}/releases/latest/download/`;
+// key → { label, file, run } — `run` is the how-to-launch note for that OS.
+const HELPER_ASSETS = {
+  win:      { label: 'Windows',              file: 'movielibrary-helper-win-x64.exe',
+              run: 'Double-click the downloaded <code>.exe</code>. If Windows SmartScreen warns, click <b>More info → Run anyway</b>.' },
+  macArm:   { label: 'macOS (Apple Silicon)', file: 'movielibrary-helper-macos-arm64',
+              run: 'macOS quarantines downloads, so open <b>Terminal</b> and run once:<pre>xattr -dr com.apple.quarantine ~/Downloads/movielibrary-helper-macos-arm64\nchmod +x ~/Downloads/movielibrary-helper-macos-arm64\n~/Downloads/movielibrary-helper-macos-arm64</pre>' },
+  macIntel: { label: 'macOS (Intel)',        file: 'movielibrary-helper-macos-x64',
+              run: 'macOS quarantines downloads, so open <b>Terminal</b> and run once:<pre>xattr -dr com.apple.quarantine ~/Downloads/movielibrary-helper-macos-x64\nchmod +x ~/Downloads/movielibrary-helper-macos-x64\n~/Downloads/movielibrary-helper-macos-x64</pre>' },
+  linux:    { label: 'Linux',                file: 'movielibrary-helper-linux-x64',
+              run: 'In a terminal:<pre>chmod +x ~/Downloads/movielibrary-helper-linux-x64\n~/Downloads/movielibrary-helper-linux-x64</pre>' },
+};
+
+function detectOS() {
+  const ua = navigator.userAgent || '';
+  const plat = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+  if (/win/.test(plat) || /Windows/i.test(ua)) return 'win';
+  if (/linux|x11/.test(plat) || (/Linux/i.test(ua) && !/Android/i.test(ua))) return 'linux';
+  if (/mac/.test(plat) || /Mac/i.test(ua)) return 'macArm'; // Apple Silicon is the modern default; Intel offered too
+  return 'win';
+}
+
+function renderDownloads() {
+  const box = $('helperDownload');
+  if (!box) return;
+  const primaryKey = detectOS();
+  const primary = HELPER_ASSETS[primaryKey];
+  // Show the other platforms (collapse the two mac entries to whichever isn't primary).
+  const otherKeys = Object.keys(HELPER_ASSETS).filter((k) => k !== primaryKey);
+  box.innerHTML = `
+    <a class="btn download-primary" href="${DL_BASE}${primary.file}" download>⬇ Download helper for ${primary.label}</a>
+    <div class="download-others">Other systems: ${
+      otherKeys.map((k) => `<a href="${DL_BASE}${HELPER_ASSETS[k].file}" download>${HELPER_ASSETS[k].label}</a>`).join(' · ')
+    }</div>`;
+
+  const help = $('runHelp');
+  if (help) {
+    help.innerHTML = `<summary>How to run it on ${primary.label}</summary><div class="run-note">${primary.run}</div>`;
+  }
+  const readme = $('readmeLink');
+  if (readme) readme.href = `https://github.com/${GH_REPO}#readme`;
 }
 
 // ── PWA: service worker + install prompt ──────────────────────────────────

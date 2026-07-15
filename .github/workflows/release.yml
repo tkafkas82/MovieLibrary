@@ -1,0 +1,47 @@
+name: Release helper binaries
+
+# Push a version tag (e.g. v1.0.0) to build the standalone helper binaries and
+# publish them as a GitHub Release. The site's download buttons point at
+# releases/latest/download/<asset>, so a new release updates them automatically.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}   # allow manual runs from the Actions tab
+
+permissions:
+  contents: write          # needed to create the release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # pkg ad-hoc-signs the macOS binaries when `ldid` is on PATH; without it
+      # they are unsigned and macOS gatekeeper kills them on launch.
+      - name: Install ldid (ad-hoc sign macOS binaries)
+        run: sudo apt-get update && sudo apt-get install -y ldid
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && TAG="v0.0.0-dev"
+          FILES="dist/movielibrary-helper-win-x64.exe \
+            dist/movielibrary-helper-macos-x64 \
+            dist/movielibrary-helper-macos-arm64 \
+            dist/movielibrary-helper-linux-x64"
+          # Create the release (first run), or just (re)upload assets if the tag
+          # already has one. --clobber is valid on `upload`, not on `create`.
+          gh release create "$TAG" $FILES \
+            --title "Movie Library helper $TAG" \
+            --notes "Standalone helper binaries (no Node needed). Download the one for your OS; see the README for run instructions. macOS builds are ad-hoc signed." \
+            || gh release upload "$TAG" $FILES --clobber

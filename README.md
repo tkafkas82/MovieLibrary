@@ -108,6 +108,16 @@ npm install       # once, pulls the build tooling (esbuild + @yao-pkg/pkg)
 npm run build     # cross-compiles all targets into ./dist
 ```
 
+> **Automated releases + one-click download.** Pushing a version tag runs
+> `.github/workflows/release.yml`, which builds all four binaries (ad-hoc-signing
+> the macOS ones) and publishes them as a GitHub Release:
+> ```bash
+> git tag v1.0.0 && git push origin v1.0.0
+> ```
+> The deployed site's setup screen links to `releases/latest/download/…`, so
+> visitors download the right helper for their OS with one click — no need to
+> browse GitHub or build anything themselves.
+
 `build.mjs` bundles the ESM source into one file (esbuild) and wraps it in a Node runtime for each OS (pkg). You get, in `dist/`:
 
 | File | Runs on |
