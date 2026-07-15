@@ -59,6 +59,9 @@ function initSync() {
   if (!S || !S.enabled) return; // sign-in not configured — leave UI hidden
   const area = $('authArea');
   if (area) area.hidden = false;
+  // Show the sign-in button right away — don't wait for the Firebase SDK to
+  // finish loading over the network. onState re-renders once auth resolves.
+  renderAuth({ signedIn: false });
   S.onState((st) => {
     renderAuth(st);
     if (st.signedIn) maybeApplyCloud(st.config);
