@@ -1,0 +1,14 @@
+{
+  "name": "mkv-movie-library",
+  "version": "1.0.0",
+  "description": "Local webpage that scans your disks for .mkv movies and builds a poster library with IMDb details (via OMDb).",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

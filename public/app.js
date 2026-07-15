@@ -1,0 +1,439 @@
+// MKV Movie Library — frontend logic (vanilla JS). Handles standalone movies
+// and TV series (episodes grouped by season).
+
+const state = {
+  movies: [],   // kind: 'movie'
+  series: [],   // kind: 'series' (with .seasons[].episodes[])
+  config: { scanRoots: [], formats: ['.mkv'], hasApiKey: false, drives: [] },
+  filters: { q: '', genre: '', sort: 'rating', minRating: 0, onlyUnmatched: false },
+  stream: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const api = async (url, opts) => {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+};
+
+// ── init ────────────────────────────────────────────────────────────────
+async function init() {
+  wireEvents();
+  await loadConfig();
+  await loadLibrary();
+}
+
+async function loadConfig() { state.config = await api('/api/config'); }
+
+async function loadLibrary() {
+  const data = await api('/api/library');
+  state.movies = data.movies || [];
+  state.series = data.series || [];
+  render();
+}
+
+const allItems = () => [...state.movies, ...state.series];
+
+// ── rendering ─────────────────────────────────────────────────────────────
+function render() {
+  renderStats();
+  renderGenreOptions();
+  const list = filtered();
+  const grid = $('grid');
+  const empty = $('empty');
+
+  if (!allItems().length) {
+    grid.innerHTML = ''; empty.hidden = false;
+    empty.innerHTML = state.config.scanRoots.length
+      ? `No movies yet. Click <b>Scan disks</b> to index your <b>${state.config.formats.join(', ')}</b> files.`
+      : `Welcome! Open <b>⚙ Settings</b>, add the folders that hold your movies, then click <b>Scan disks</b>.`;
+    return;
+  }
+  if (!list.length) { grid.innerHTML = ''; empty.hidden = false; empty.textContent = 'Nothing matches the current filters.'; return; }
+
+  empty.hidden = true;
+  grid.innerHTML = list.map(card).join('');
+}
+
+function renderStats() {
+  const m = state.movies.length;
+  const s = state.series.length;
+  const matched = state.movies.filter((x) => x.imdb).length + state.series.filter((x) => x.imdb).length;
+  const bits = [];
+  if (m) bits.push(`${m} movie${m === 1 ? '' : 's'}`);
+  if (s) bits.push(`${s} series`);
+  const total = m + s;
+  $('stats').textContent = total ? `${bits.join(' · ')} · ${matched} matched to IMDb` : '';
+  $('enrichBtn').disabled = !total;
+}
+
+function renderGenreOptions() {
+  const set = new Set();
+  for (const it of allItems()) (it.imdb?.genre || '').split(',').forEach((g) => { g = g.trim(); if (g) set.add(g); });
+  const cur = state.filters.genre;
+  $('genre').innerHTML = '<option value="">All genres</option>' +
+    [...set].sort().map((g) => `<option value="${esc(g)}"${g === cur ? ' selected' : ''}>${esc(g)}</option>`).join('');
+}
+
+function filtered() {
+  const { q, genre, sort, minRating, onlyUnmatched } = state.filters;
+  const ql = q.toLowerCase();
+  const list = allItems().filter((it) => {
+    if (onlyUnmatched && it.imdb) return false;
+    if (genre && !(it.imdb?.genre || '').toLowerCase().includes(genre.toLowerCase())) return false;
+    if (minRating > 0) { const r = parseFloat(it.imdb?.rating); if (!(r >= minRating)) return false; }
+    if (ql) {
+      const hay = `${it.title || ''} ${it.imdb?.title || ''} ${it.imdb?.director || ''} ${it.fileName || ''} ${it.series || ''}`.toLowerCase();
+      if (!hay.includes(ql)) return false;
+    }
+    return true;
+  });
+
+  const yr = (it) => parseInt(it.imdb?.year || it.year || 0, 10) || 0;
+  const rt = (it) => parseFloat(it.imdb?.rating) || 0;
+  const ttl = (it) => (it.imdb?.title || it.title || '').toLowerCase();
+  const cmp = {
+    rating: (a, b) => rt(b) - rt(a) || yr(b) - yr(a),
+    year: (a, b) => yr(b) - yr(a),
+    yearAsc: (a, b) => yr(a) - yr(b),
+    title: (a, b) => ttl(a).localeCompare(ttl(b)),
+    added: (a, b) => (b.addedAt || 0) - (a.addedAt || 0),
+  }[sort] || (() => 0);
+  return list.sort(cmp);
+}
+
+function posterHtml(im, title) {
+  return im?.poster
+    ? `<img loading="lazy" src="${esc(im.poster)}" alt="" onerror="this.parentNode.classList.add('failed')">`
+    : '';
+}
+function noimg(title) { return `<div class="noimg"><div class="big">🎬</div><div>${esc(title)}</div></div>`; }
+
+function ratingBadge(im) { return im?.rating ? `<div class="rating">★ ${esc(im.rating)}</div>` : ''; }
+function genreChips(im) {
+  return (im?.genre || '').split(',').map((g) => g.trim()).filter(Boolean).slice(0, 3)
+    .map((g) => `<span class="genre-chip">${esc(g)}</span>`).join('');
+}
+
+function card(it) {
+  return it.kind === 'series' ? seriesCard(it) : movieCard(it);
+}
+
+function movieCard(m) {
+  const im = m.imdb;
+  const title = im?.title || m.title || m.fileName;
+  const year = im?.year || m.year || '';
+  const runtime = im?.runtime ? ` · ${esc(im.runtime)}` : '';
+  const director = im?.director ? `<div class="card-sub">🎬 ${esc(im.director)}</div>` : '';
+  const unmatched = !im ? `<div class="badge-un">${m.error ? 'not found' : 'not matched'}</div>` : '';
+  const imdbLink = im?.imdbUrl ? `<a class="iconbtn" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">IMDb</a>` : '';
+  return `<div class="card" data-id="${m.id}" data-kind="movie">
+    <div class="poster">${posterHtml(im)}${noimg(title)}${ratingBadge(im)}${unmatched}</div>
+    <div class="card-body">
+      <div class="card-title">${esc(title)}</div>
+      <div class="card-sub">${esc(String(year))}${runtime}</div>
+      ${director}
+      <div class="genres">${genreChips(im)}</div>
+      <div class="card-path" title="${esc(m.path)}">${esc(m.path)}</div>
+      <div class="actions">
+        <button class="iconbtn" data-act="play" title="Open with default player">▶ Play</button>
+        <button class="iconbtn" data-act="reveal" title="Show in Explorer">📁</button>
+        ${imdbLink}
+        <button class="iconbtn" data-act="rematch" title="Fix IMDb match">🔗</button>
+        <button class="iconbtn x" data-act="remove" title="Remove from library">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function seriesCard(s) {
+  const im = s.imdb;
+  const title = im?.title || s.title;
+  const year = im?.year || s.year || '';
+  const seasons = s.seasons.length;
+  const unmatched = !im ? `<div class="badge-un">${s.error ? 'not found' : 'not matched'}</div>` : '';
+  const director = im?.director ? `<div class="card-sub">🎬 ${esc(im.director)}</div>` : '';
+  return `<div class="card series" data-key="${esc(s.key)}" data-kind="series">
+    <div class="poster">${posterHtml(im)}${noimg(title)}${ratingBadge(im)}
+      <div class="tv-badge">📺 SERIES</div>${unmatched}</div>
+    <div class="card-body">
+      <div class="card-title">${esc(title)}</div>
+      <div class="card-sub">${esc(String(year))} · ${seasons} season${seasons === 1 ? '' : 's'} · ${s.episodeCount} ep${s.episodeCount === 1 ? '' : 's'}</div>
+      ${director}
+      <div class="genres">${genreChips(im)}</div>
+      <div class="actions">
+        <button class="iconbtn" data-act="open-series" title="View seasons & episodes">View episodes</button>
+        ${im?.imdbUrl ? `<a class="iconbtn" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">IMDb</a>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── series modal ────────────────────────────────────────────────────────────
+function openSeriesModal(s) {
+  const im = s.imdb;
+  const title = im?.title || s.title;
+  const year = im?.year || s.year || '';
+  const meta = [year, im?.runtime, im?.rated].filter(Boolean).map(esc).join(' · ');
+  const seasons = s.seasons.map((sea) => `
+    <div class="season">
+      <div class="season-head">${sea.season ? 'Season ' + sea.season : 'Episodes'} <span class="hint">(${sea.episodes.length})</span></div>
+      ${sea.episodes.map((ep) => `
+        <div class="episode" data-id="${ep.id}">
+          <span class="ep-num">${ep.episode != null ? 'E' + String(ep.episode).padStart(2, '0') : '—'}</span>
+          <span class="ep-name" title="${esc(ep.path)}">${esc(ep.fileName)}</span>
+          <button class="iconbtn tiny" data-act="play" title="Play">▶</button>
+          <button class="iconbtn tiny" data-act="reveal" title="Show in Explorer">📁</button>
+        </div>`).join('')}
+    </div>`).join('');
+
+  $('seriesModalBody').innerHTML = `
+    <div class="series-top">
+      <div class="series-poster">${im?.poster ? `<img src="${esc(im.poster)}" alt="">` : noimg(title)}</div>
+      <div class="series-info">
+        <h2>${esc(title)} ${im?.rating ? `<span class="rating inline">★ ${esc(im.rating)}</span>` : ''}</h2>
+        <div class="card-sub">${meta}</div>
+        ${im?.genre ? `<div class="genres">${genreChips(im)}</div>` : ''}
+        ${im?.director ? `<div class="card-sub">🎬 ${esc(im.director)}</div>` : ''}
+        ${im?.actors ? `<div class="card-sub">${esc(im.actors)}</div>` : ''}
+        ${im?.plot ? `<p class="plot">${esc(im.plot)}</p>` : ''}
+        <div class="series-actions">
+          ${im?.imdbUrl ? `<a class="btn ghost tiny" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">Open on IMDb</a>` : ''}
+          <button class="btn ghost tiny" data-act="rematch-series" data-key="${esc(s.key)}">Fix match</button>
+          <button class="btn ghost tiny" data-act="remove-series" data-key="${esc(s.key)}">Remove series</button>
+          <div class="spacer"></div>
+          <button class="btn tiny" data-act="close-series">Close</button>
+        </div>
+      </div>
+    </div>
+    <div class="seasons">${seasons}</div>`;
+  $('seriesModal').hidden = false;
+}
+function closeSeriesModal() { $('seriesModal').hidden = true; }
+
+// ── click handling ──────────────────────────────────────────────────────────
+async function onGridClick(e) {
+  const btn = e.target.closest('[data-act]');
+  const cardEl = e.target.closest('.card');
+  if (!cardEl) return;
+
+  if (cardEl.dataset.kind === 'series') {
+    const s = state.series.find((x) => x.key === cardEl.dataset.key);
+    if (!s) return;
+    // Clicking the poster/title or the "View episodes" button opens the modal.
+    if (!btn || btn.dataset.act === 'open-series') { openSeriesModal(s); }
+    return;
+  }
+
+  if (!btn) return;
+  const m = state.movies.find((x) => x.id === cardEl.dataset.id);
+  if (!m) return;
+  const act = btn.dataset.act;
+  if (act === 'play') post('/api/open', { path: m.path });
+  else if (act === 'reveal') post('/api/reveal', { path: m.path });
+  else if (act === 'rematch') {
+    const r = await rematch({ kind: 'movie', id: m.id });
+    if (r) { m.imdb = r.info; m.enriched = true; m.error = null; render(); toast('Matched to ' + (r.info.title || 'IMDb') + '.'); }
+  } else if (act === 'remove') {
+    await api('/api/library/' + m.id, { method: 'DELETE' });
+    state.movies = state.movies.filter((x) => x.id !== m.id);
+    render();
+  }
+}
+
+// Prompt for an IMDb id/URL and re-match the given movie/series to it.
+async function rematch(body) {
+  const val = prompt('Paste the correct IMDb URL or id\n(e.g. https://www.imdb.com/title/tt0306414/ or tt0306414):');
+  if (!val) return null;
+  try {
+    return await api('/api/rematch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, imdb: val }),
+    });
+  } catch (err) { alert('Re-match failed: ' + err.message); return null; }
+}
+
+async function onSeriesModalClick(e) {
+  if (e.target === $('seriesModal')) { closeSeriesModal(); return; }
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  if (act === 'close-series') { closeSeriesModal(); return; }
+
+  if (act === 'rematch-series') {
+    const s = state.series.find((x) => x.key === btn.dataset.key);
+    if (!s) return;
+    const r = await rematch({ kind: 'series', key: s.key });
+    if (r) {
+      await loadLibrary();
+      const ns = state.series.find((x) => x.key === s.key);
+      if (ns) openSeriesModal(ns);
+      toast('Matched to ' + (r.info.title || 'IMDb') + '.');
+    }
+    return;
+  }
+
+  if (act === 'remove-series') {
+    const s = state.series.find((x) => x.key === btn.dataset.key);
+    if (!s || !confirm(`Remove "${s.imdb?.title || s.title}" and its ${s.episodeCount} episodes from the library? (Files are not touched.)`)) return;
+    const ids = s.seasons.flatMap((sea) => sea.episodes.map((ep) => ep.id));
+    await Promise.all(ids.map((id) => api('/api/library/' + id, { method: 'DELETE' }).catch(() => {})));
+    closeSeriesModal();
+    await loadLibrary();
+    return;
+  }
+
+  const epEl = e.target.closest('.episode');
+  if (!epEl) return;
+  const id = epEl.dataset.id;
+  let path = null;
+  for (const s of state.series) for (const sea of s.seasons) { const ep = sea.episodes.find((x) => x.id === id); if (ep) path = ep.path; }
+  if (!path) return;
+  if (act === 'play') post('/api/open', { path });
+  else if (act === 'reveal') post('/api/reveal', { path });
+}
+
+const post = (url, body) => fetch(url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+}).catch(() => {});
+
+// ── scan / enrich (SSE) ────────────────────────────────────────────────────
+function startStream(url, { onEvent, label }) {
+  if (state.stream) state.stream.close();
+  const es = new EventSource(url);
+  state.stream = es;
+  showProgress(true, label, true);
+  es.onmessage = (ev) => { let d; try { d = JSON.parse(ev.data); } catch { return; } onEvent(d, es); };
+  es.onerror = () => { es.close(); state.stream = null; showProgress(false); };
+}
+
+function endStream(es) { es.close(); state.stream = null; showProgress(false); setBusy(false); }
+
+function startScan() {
+  if (!state.config.scanRoots.length) { openSettings(); return; }
+  setBusy(true);
+  startStream('/api/scan/stream', {
+    label: 'Scanning…',
+    onEvent: async (d, es) => {
+      if (d.event === 'progress') setProgress(null, `Scanning… ${d.found} found — ${d.dir}`);
+      else if (d.event === 'done') {
+        endStream(es);
+        await loadLibrary();
+        toast(`Scan complete — ${d.added} new · ${d.movies} movies, ${d.series} series.`);
+        if ((d.movies || d.series) && !state.config.hasApiKey) toast('Add an OMDb key in Settings, then click Fetch IMDb.');
+      } else if (d.event === 'error') { endStream(es); alert(d.message); }
+    },
+  });
+}
+
+function startEnrich() {
+  if (!state.config.hasApiKey) { alert('Add your free OMDb API key in Settings first.'); openSettings(); return; }
+  setBusy(true);
+  startStream('/api/enrich/stream', {
+    label: 'Fetching IMDb…',
+    onEvent: async (d, es) => {
+      if (d.event === 'start') setProgress(0, `Fetching IMDb data for ${d.count} titles…`);
+      else if (d.event === 'progress') setProgress(d.total ? d.done / d.total : null, `Fetching IMDb… ${d.done}/${d.total} — ${d.title || ''}`);
+      else if (d.event === 'done') {
+        endStream(es);
+        await loadLibrary();
+        toast(`IMDb fetch complete — ${d.ok}/${d.total} matched.`);
+      } else if (d.event === 'error') { endStream(es); await loadLibrary(); alert(d.message); }
+    },
+  });
+}
+
+// ── progress UI ─────────────────────────────────────────────────────────────
+function showProgress(on, label, indeterminate) {
+  $('progress').hidden = !on;
+  const fill = $('progressFill');
+  if (on) { fill.classList.toggle('indeterminate', !!indeterminate); if (indeterminate) fill.style.width = ''; $('progressText').textContent = label || ''; }
+}
+function setProgress(frac, text) {
+  const fill = $('progressFill');
+  if (frac == null) { fill.classList.add('indeterminate'); fill.style.width = ''; }
+  else { fill.classList.remove('indeterminate'); fill.style.width = Math.round(frac * 100) + '%'; }
+  if (text != null) $('progressText').textContent = text;
+}
+function setBusy(b) { $('scanBtn').disabled = b; $('enrichBtn').disabled = b || !allItems().length; }
+
+// ── settings ──────────────────────────────────────────────────────────────
+function openSettings() {
+  $('scanRoots').value = state.config.scanRoots.join('\n');
+  $('formats').value = state.config.formats.join(', ');
+  $('omdbKey').value = '';
+  const ks = $('keyStatus');
+  ks.textContent = state.config.hasApiKey ? '✓ A key is saved. Leave blank to keep it, or paste a new one.' : 'No key saved yet.';
+  ks.className = 'key-status ' + (state.config.hasApiKey ? 'ok' : 'no');
+  $('drives').innerHTML = (state.config.drives || []).map((d) => `<span class="drive-chip" data-drive="${esc(d)}">${esc(d)}</span>`).join('');
+  $('settingsModal').hidden = false;
+}
+function closeSettings() { $('settingsModal').hidden = true; }
+
+async function saveSettings() {
+  const scanRoots = $('scanRoots').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  const formats = $('formats').value.split(',').map((s) => s.trim()).filter(Boolean);
+  const key = $('omdbKey').value.trim();
+  const body = { scanRoots, formats };
+  if (key) body.omdbApiKey = key;
+  try {
+    state.config = await api('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (err) { alert('Could not save settings: ' + err.message); return; }
+  closeSettings(); render(); toast('Settings saved.');
+}
+
+async function clearLibrary() {
+  if (!confirm('Remove all movies and series from the library? (Your files are not touched.)')) return;
+  await api('/api/library', { method: 'DELETE' });
+  state.movies = []; state.series = [];
+  closeSettings(); render();
+}
+
+// ── misc ────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  let el = $('toast');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'toast';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1c2330;border:1px solid #2a3240;color:#e6edf3;padding:10px 18px;border-radius:8px;z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.4);font-size:.9em;max-width:90vw;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; }, 3400);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function wireEvents() {
+  $('scanBtn').onclick = startScan;
+  $('enrichBtn').onclick = startEnrich;
+  $('settingsBtn').onclick = openSettings;
+  $('settingsCancel').onclick = closeSettings;
+  $('settingsSave').onclick = saveSettings;
+  $('clearLibBtn').onclick = clearLibrary;
+  $('grid').onclick = onGridClick;
+  $('seriesModal').onclick = onSeriesModalClick;
+  $('progressCancel').onclick = () => { if (state.stream) { state.stream.close(); state.stream = null; } showProgress(false); setBusy(false); };
+
+  $('search').oninput = (e) => { state.filters.q = e.target.value; render(); };
+  $('genre').onchange = (e) => { state.filters.genre = e.target.value; render(); };
+  $('sort').onchange = (e) => { state.filters.sort = e.target.value; render(); };
+  $('minRating').oninput = (e) => { state.filters.minRating = +e.target.value; $('minRatingVal').textContent = e.target.value; render(); };
+  $('onlyUnmatched').onchange = (e) => { state.filters.onlyUnmatched = e.target.checked; render(); };
+
+  $('drives').onclick = (e) => {
+    const chip = e.target.closest('[data-drive]'); if (!chip) return;
+    const ta = $('scanRoots');
+    const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!lines.includes(chip.dataset.drive)) lines.push(chip.dataset.drive);
+    ta.value = lines.join('\n');
+  };
+
+  $('settingsModal').onclick = (e) => { if (e.target === $('settingsModal')) closeSettings(); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeSettings(); closeSeriesModal(); } });
+}
+
+init();

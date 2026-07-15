@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MKV Movie Library</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎬 <span>MKV Movie Library</span></div>
+    <div class="stats" id="stats"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="scanBtn">Scan disks</button>
+    <button class="btn" id="enrichBtn">Fetch IMDb</button>
+    <button class="btn ghost" id="settingsBtn">⚙ Settings</button>
+  </header>
+
+  <div class="progress" id="progress" hidden>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText"></div>
+    <button class="btn tiny ghost" id="progressCancel">Stop</button>
+  </div>
+
+  <section class="toolbar">
+    <input type="search" id="search" placeholder="Search title, director…" />
+    <select id="genre"><option value="">All genres</option></select>
+    <select id="sort">
+      <option value="rating">Top rated</option>
+      <option value="year">Newest</option>
+      <option value="yearAsc">Oldest</option>
+      <option value="title">Title A–Z</option>
+      <option value="added">Recently added</option>
+    </select>
+    <label class="minrating">★ ≥
+      <input type="range" id="minRating" min="0" max="9" step="1" value="0" />
+      <span id="minRatingVal">0</span>
+    </label>
+    <label class="chk"><input type="checkbox" id="onlyUnmatched" /> Unmatched only</label>
+  </section>
+
+  <main id="grid" class="grid"></main>
+  <div id="empty" class="empty" hidden></div>
+
+  <!-- Series / episodes modal -->
+  <div class="modal-overlay" id="seriesModal" hidden>
+    <div class="modal series-modal" id="seriesModalBody"></div>
+  </div>
+
+  <!-- Settings modal -->
+  <div class="modal-overlay" id="settingsModal" hidden>
+    <div class="modal">
+      <h2>Settings</h2>
+
+      <label class="field-label">Folders to scan <span class="hint">(one per line)</span></label>
+      <textarea id="scanRoots" rows="5" placeholder="D:\Movies&#10;E:\Films"></textarea>
+      <div class="drives" id="drives"></div>
+
+      <label class="field-label">File extensions <span class="hint">(comma separated)</span></label>
+      <input type="text" id="formats" placeholder=".mkv" />
+
+      <label class="field-label">OMDb API key
+        <span class="hint">— free at <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer">omdbapi.com/apikey.aspx</a></span>
+      </label>
+      <input type="password" id="omdbKey" placeholder="Paste key to enable IMDb details" autocomplete="off" />
+      <div class="key-status" id="keyStatus"></div>
+
+      <div class="modal-actions">
+        <button class="btn ghost" id="clearLibBtn">Clear library</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="settingsCancel">Cancel</button>
+        <button class="btn" id="settingsSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
