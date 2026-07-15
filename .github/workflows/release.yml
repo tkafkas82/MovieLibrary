@@ -13,7 +13,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Run on macOS so `codesign` is available — we ad-hoc-sign the macOS
+    # binaries here (unsigned ones are killed by gatekeeper). pkg still
+    # cross-compiles the Windows and Linux binaries from this runner.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -21,13 +24,13 @@ jobs:
         with:
           node-version: 22
 
-      # pkg ad-hoc-signs the macOS binaries when `ldid` is on PATH; without it
-      # they are unsigned and macOS gatekeeper kills them on launch.
-      - name: Install ldid (ad-hoc sign macOS binaries)
-        run: sudo apt-get update && sudo apt-get install -y ldid
-
       - run: npm ci
       - run: npm run build
+
+      - name: Ad-hoc sign the macOS binaries
+        run: |
+          codesign --force --sign - dist/movielibrary-helper-macos-arm64
+          codesign --force --sign - dist/movielibrary-helper-macos-x64
 
       - name: Publish release
         env:
