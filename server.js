@@ -378,15 +378,16 @@ function launch(p, { reveal }) {
 
   if (plat === 'win32') {
     if (reveal) return spawn('explorer.exe', ['/select,' + p], { detached: true, stdio: 'ignore' });
-    // Open in the default player, then focus it. Windows blocks a background
-    // process from stealing focus, so we launch via PowerShell and use
-    // AppActivate (best-effort) to raise the new window.
-    const psPath = "'" + p.replace(/'/g, "''") + "'";
+    // Open with the default app via explorer (ShellExecute) — reliable for every
+    // association, including UWP apps like "Films & TV" (Start-Process -PassThru
+    // silently fails for those). Then, as a SEPARATE best-effort step that can
+    // never block the open, raise the player window matched by the file's name.
+    spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }).unref();
+    const base = path.basename(p).replace(/\.[^.]+$/, '');
+    const title = "'" + base.replace(/'/g, "''") + "'";
     const cmd =
-      "$ErrorActionPreference='SilentlyContinue';" +
-      `$pr = Start-Process -FilePath ${psPath} -PassThru;` +
-      'Start-Sleep -Milliseconds 500;' +
-      'if ($pr -and -not $pr.HasExited) { (New-Object -ComObject WScript.Shell).AppActivate($pr.Id) | Out-Null }';
+      "$ErrorActionPreference='SilentlyContinue';Start-Sleep -Milliseconds 1200;" +
+      `try { (New-Object -ComObject WScript.Shell).AppActivate(${title}) | Out-Null } catch {}`;
     return spawn('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', cmd], { detached: true, stdio: 'ignore' });
   }
 

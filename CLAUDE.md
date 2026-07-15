@@ -90,10 +90,12 @@ cross-device sync would be meaningless.
 5. `POST /api/open` / `POST /api/reveal` — launch the file in the default player /
    reveal it in the file manager, cross-platform (`launch()` in server.js), and
    bring it to the foreground. macOS `open`/`open -R` and Linux `xdg-open`
-   activate the target; Windows reveal uses `explorer.exe /select,`, while
-   **play** goes through PowerShell `Start-Process -PassThru` + `AppActivate`
-   (best-effort — Windows blocks a background process from stealing focus, and
-   single-instance players that hand off may still not raise).
+   activate the target; Windows reveal uses `explorer.exe /select,`. Windows
+   **play** opens via `explorer.exe <path>` (ShellExecute — reliable for every
+   association incl. UWP "Films & TV"; `Start-Process -PassThru` silently FAILS
+   for those, which broke opening in v1.0.2–1.0.3), then a SEPARATE best-effort
+   PowerShell `AppActivate('<file base name>')` raises the player window by
+   title match. The activate step can never block the open.
 
 ## Notes / gotchas
 
