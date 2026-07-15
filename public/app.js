@@ -611,25 +611,48 @@ function detectOS() {
   return 'win';
 }
 
-function renderDownloads() {
+// Build a download URL. With a release tag we use a *version-specific* URL so a
+// new release is a brand-new link — no stale browser/CDN copy of the old file.
+// Falls back to the "latest" alias when the tag lookup fails.
+function dlUrl(tag, file) {
+  return tag
+    ? `https://github.com/${GH_REPO}/releases/download/${encodeURIComponent(tag)}/${file}`
+    : `${DL_BASE}${file}`;
+}
+
+async function fetchLatestTag() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store',
+    });
+    if (r.ok) return (await r.json()).tag_name || null;
+  } catch { /* offline / rate-limited — fall back to the "latest" alias */ }
+  return null;
+}
+
+function paintDownloads(tag) {
   const box = $('helperDownload');
   if (!box) return;
   const primaryKey = detectOS();
   const primary = HELPER_ASSETS[primaryKey];
-  // Show the other platforms (collapse the two mac entries to whichever isn't primary).
   const otherKeys = Object.keys(HELPER_ASSETS).filter((k) => k !== primaryKey);
+  const ver = tag ? ` <span class="dl-ver">${esc(tag)}</span>` : '';
   box.innerHTML = `
-    <a class="btn download-primary" href="${DL_BASE}${primary.file}" download>⬇ Download helper for ${primary.label}</a>
+    <a class="btn download-primary" href="${dlUrl(tag, primary.file)}" download>⬇ Download helper for ${primary.label}${ver}</a>
     <div class="download-others">Other systems: ${
-      otherKeys.map((k) => `<a href="${DL_BASE}${HELPER_ASSETS[k].file}" download>${HELPER_ASSETS[k].label}</a>`).join(' · ')
+      otherKeys.map((k) => `<a href="${dlUrl(tag, HELPER_ASSETS[k].file)}" download>${HELPER_ASSETS[k].label}</a>`).join(' · ')
     }</div>`;
 
   const help = $('runHelp');
-  if (help) {
-    help.innerHTML = `<summary>How to run it on ${primary.label}</summary><div class="run-note">${primary.run}</div>`;
-  }
+  if (help) help.innerHTML = `<summary>How to run it on ${primary.label}</summary><div class="run-note">${primary.run}</div>`;
   const readme = $('readmeLink');
-  if (readme) readme.href = `https://github.com/${GH_REPO}#readme`;
+  if (readme) readme.href = `https://github.com/${GH_REPO}/releases/latest`;
+}
+
+async function renderDownloads() {
+  paintDownloads(null);                 // show buttons immediately (latest alias)
+  const tag = await fetchLatestTag();   // then upgrade to version-pinned URLs
+  if (tag) paintDownloads(tag);
 }
 
 // ── PWA: service worker + install prompt ──────────────────────────────────
