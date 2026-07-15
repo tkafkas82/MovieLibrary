@@ -207,14 +207,18 @@ app.delete('/api/library/:id', (req, res) => {
 app.get('/api/scan/stream', async (_req, res) => {
   const send = sse(res);
   const cfg = loadConfig();
-  if (!cfg.scanRoots.length) {
-    send('error', { message: 'No scan folders configured. Add folders in Settings.' });
+  // No folders configured → scan the whole computer (every drive/volume).
+  const roots = cfg.scanRoots.length ? cfg.scanRoots : listDrives();
+  const wholeSystem = !cfg.scanRoots.length;
+  if (!roots.length) {
+    send('error', { message: 'No drives found to scan. Add a folder in Settings.' });
     return res.end();
   }
+  if (wholeSystem) send('progress', { dir: 'Scanning entire computer…', found: 0 });
 
   let lastTick = 0;
   try {
-    const files = await scanRoots(cfg.scanRoots, cfg.formats, (dir, found) => {
+    const files = await scanRoots(roots, cfg.formats, (dir, found) => {
       const now = Date.now();
       if (now - lastTick > 120) {
         lastTick = now;

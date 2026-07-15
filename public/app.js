@@ -7,6 +7,7 @@ const state = {
   config: { scanRoots: [], formats: ['.mkv'], hasApiKey: false, drives: [] },
   filters: { q: '', genre: '', sort: 'rating', minRating: 0, onlyUnmatched: false },
   stream: null,
+  connected: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -45,8 +46,64 @@ async function pingHelper() {
 async function init() {
   wireEvents();
   registerServiceWorker();
+  initSync();
   await connect();
   hideSplash();
+}
+
+// ── cloud sync (optional Google login, via window.MovieSync/auth.js) ───────
+let pendingCloudApply = null;
+
+function initSync() {
+  const S = window.MovieSync;
+  if (!S || !S.enabled) return; // sign-in not configured — leave UI hidden
+  const area = $('authArea');
+  if (area) area.hidden = false;
+  S.onState((st) => {
+    renderAuth(st);
+    if (st.signedIn) maybeApplyCloud(st.config);
+  });
+}
+
+function renderAuth(st) {
+  const el = $('authArea');
+  if (!el) return;
+  if (st.signedIn) {
+    el.innerHTML = `<span class="acct" title="Signed in — settings sync to your account">☁ ${esc(st.email || 'account')}</span>
+      <button class="btn ghost tiny" id="signOutBtn">Sign out</button>`;
+    $('signOutBtn').onclick = () => window.MovieSync.signOut();
+  } else {
+    el.innerHTML = `<button class="btn ghost tiny" id="signInBtn" title="Sync your folders & OMDb key across devices">Sign in with Google</button>`;
+    $('signInBtn').onclick = () => window.MovieSync.signIn();
+  }
+}
+
+// After sign-in: push the account's saved settings down to the local helper.
+async function maybeApplyCloud(cloud) {
+  if (!cloud) {
+    // First sign-in with no saved settings yet — seed the account from what's
+    // configured here (the OMDb key isn't readable client-side, so it syncs the
+    // next time Settings is saved with a key entered).
+    window.MovieSync.save({ scanRoots: state.config.scanRoots, formats: state.config.formats });
+    return;
+  }
+  if (!state.connected) { pendingCloudApply = cloud; return; } // apply once helper is up
+  await applyCloudToHelper(cloud);
+}
+
+async function applyCloudToHelper(cloud) {
+  const body = {};
+  if (Array.isArray(cloud.scanRoots)) body.scanRoots = cloud.scanRoots;
+  if (Array.isArray(cloud.formats)) body.formats = cloud.formats;
+  if (typeof cloud.omdbApiKey === 'string' && cloud.omdbApiKey) body.omdbApiKey = cloud.omdbApiKey;
+  if (!Object.keys(body).length) return;
+  try {
+    state.config = await api('/api/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    render();
+    toast('Synced settings from your Google account.');
+  } catch (err) { /* helper went away — will re-sync on next connect */ }
 }
 
 function hideSplash() {
@@ -60,13 +117,17 @@ function hideSplash() {
 // Shows a friendly offline screen when the helper isn't reachable.
 async function connect() {
   const ok = SERVED_LOCALLY || await pingHelper();
+  state.connected = ok;
   setHelperStatus(ok);
   if (!ok) { showHelperOffline(true); return; }
   showHelperOffline(false);
   try {
     await loadConfig();
     await loadLibrary();
+    // A sign-in that happened before the helper was up left settings waiting.
+    if (pendingCloudApply) { const c = pendingCloudApply; pendingCloudApply = null; await applyCloudToHelper(c); }
   } catch {
+    state.connected = false;
     setHelperStatus(false);
     showHelperOffline(true);
   }
@@ -95,7 +156,7 @@ function render() {
     grid.innerHTML = ''; empty.hidden = false;
     empty.innerHTML = state.config.scanRoots.length
       ? `No movies yet. Click <b>Scan disks</b> to index your <b>${state.config.formats.join(', ')}</b> files.`
-      : `Welcome! Open <b>⚙ Settings</b>, add the folders that hold your movies, then click <b>Scan disks</b>.`;
+      : `Welcome! Click <b>Scan disks</b> to search your whole computer, or open <b>⚙ Settings</b> first to point it at specific folders (faster).`;
     return;
   }
   if (!list.length) { grid.innerHTML = ''; empty.hidden = false; empty.textContent = 'Nothing matches the current filters.'; return; }
@@ -359,7 +420,13 @@ function startStream(url, { onEvent, label }) {
 function endStream(es) { es.close(); state.stream = null; showProgress(false); setBusy(false); }
 
 function startScan() {
-  if (!state.config.scanRoots.length) { openSettings(); return; }
+  if (!state.config.scanRoots.length) {
+    const drives = (state.config.drives || []).join(', ') || 'all drives';
+    if (!confirm(`No folders set in Settings, so this will scan your whole computer (${drives}).\n\nThat can take a while. Continue?\n\n(Tip: add specific folders in Settings for a faster, targeted scan.)`)) {
+      openSettings();
+      return;
+    }
+  }
   setBusy(true);
   startStream('/api/scan/stream', {
     label: 'Scanning…',
@@ -428,7 +495,11 @@ async function saveSettings() {
   try {
     state.config = await api('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   } catch (err) { alert('Could not save settings: ' + err.message); return; }
-  closeSettings(); render(); toast('Settings saved.');
+  // Also sync to the signed-in Google account (no-op if not signed in). The key
+  // is only written when the user actually typed one this save.
+  window.MovieSync?.save?.({ scanRoots, formats, omdbApiKey: key });
+  closeSettings(); render();
+  toast(window.MovieSync?.user ? 'Settings saved & synced to your account.' : 'Settings saved.');
 }
 
 async function clearLibrary() {

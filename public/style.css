@@ -260,3 +260,10 @@ body.offline .toolbar, body.offline #grid, body.offline #empty { display: none !
   font-size: .85em; color: var(--text); white-space: pre;
 }
 .offline-alt { margin-top: 16px; font-size: .82em; color: var(--muted); }
+
+/* ── Google sign-in / account ────────────────────────────────────────────── */
+.auth-area { display: flex; align-items: center; gap: 8px; }
+.auth-area .acct {
+  font-size: .8em; color: var(--muted); max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

@@ -13,7 +13,7 @@ A web app that scans your disks for movie files, pulls IMDb details for each one
 
 ## ✨ Features
 
-- **📁 Disk scanning** — recursively walks the drives/folders you configure, finds `.mkv` (or any extensions you add), and skips system/junk directories.
+- **📁 Disk scanning** — recursively walks every subfolder of the drives/folders you configure (following directory junctions/symlinks, with loop protection), finds `.mkv` (or any extensions you add), and skips system/junk directories. **No folder set? It scans your whole computer.**
 - **🧠 Smart filename parsing** — strips scene tags (resolution, source, codec, audio, release group) and extracts the real **title + year**, handling tricky year-titled films like `1917 (2019)` and `Blade Runner 2049`.
 - **🎞️ IMDb enrichment** — looks each movie up on the [OMDb API](https://www.omdbapi.com/) (IMDb data) for **rating, director, genre, plot, and poster**.
 - **🖼️ Poster-grid UI** — a responsive, searchable library that renders straight from a local cache. Zero build step, plain HTML/CSS/JS.
@@ -21,6 +21,7 @@ A web app that scans your disks for movie files, pulls IMDb details for each one
 - **⚡ Live progress** — scanning and enrichment stream progress over Server-Sent Events, so you watch the library fill in real time.
 - **📲 Installable PWA** — install it as a standalone app (its own window, icon, and splash screen) from Chrome/Edge, on desktop or mobile.
 - **☁️ Host the UI, keep the data local** — deploy the UI to Vercel and open it from any PC; a small local **helper** does the disk scanning and file-opening on that machine. Your files never leave your computer.
+- **☁️ Optional Google sync** — sign in with Google to save your scan folders + OMDb key to your account and restore them on any PC (see below).
 - **🔒 Local-first** — files, config, cache, and API key always stay on your machine. The cloud only ever serves static HTML/CSS/JS; it never sees your disks.
 
 ---
@@ -148,6 +149,41 @@ Open the UI in Chrome/Edge and click **⬇ Install** in the header (or use the b
 
 ---
 
+## 🔐 Sign in with Google to sync your settings (optional)
+
+Turn this on to save your **scan folders + OMDb key** to your Google account and have them follow you to any PC — sign in on a new machine and the app pushes those settings straight to that machine's helper. It's built on **Firebase** (Google's own Auth + Firestore), runs entirely client-side, and **stays disabled until you add a config**, so the app works fine without it.
+
+One-time setup (~5 min, free):
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com/).
+2. **Add a Web app** (`</>`) and copy the `firebaseConfig` object.
+3. **Build → Authentication → Sign-in method →** enable **Google**.
+4. **Authentication → Settings → Authorized domains →** add your Vercel domain (e.g. `your-app.vercel.app`). `localhost` is already allowed.
+5. **Build → Firestore Database → Create database** (production mode).
+6. **Firestore → Rules →** publish this (each user can touch only their own doc):
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{uid} {
+         allow read, write: if request.auth != null && request.auth.uid == uid;
+       }
+     }
+   }
+   ```
+7. Paste your config into **`public/firebase-config.js`** and redeploy:
+   ```js
+   window.FIREBASE_CONFIG = {
+     apiKey: "…", authDomain: "…", projectId: "…", appId: "…"
+   };
+   ```
+
+A **Sign in with Google** button then appears in the header. The Firebase web config is not a secret (Google intends it to live in client code) — security comes from the Firestore rule + authorized domains above.
+
+> The OMDb key is stored server-side by the helper and isn't readable by the page, so it syncs to your account the first time you **save Settings with the key entered** while signed in. After that, signing in elsewhere restores it automatically.
+
+---
+
 ## ⚙️ Configuration
 
 Config is set from the in-app **Settings** panel and stored server-side in `data/config.json`:
@@ -201,6 +237,8 @@ MovieLibrary/
 │  ├─ style.css
 │  ├─ manifest.webmanifest
 │  ├─ sw.js               # service worker (caches the app shell)
+│  ├─ auth.js             # optional Google sign-in + settings sync (Firebase)
+│  ├─ firebase-config.js  # your Firebase web config (null = sign-in disabled)
 │  └─ icons/              # SVG app icons (standard + maskable)
 ├─ data/                  # config + library cache (git-ignored, helper-side)
 ├─ vercel.json            # pins a pure-static deploy of public/

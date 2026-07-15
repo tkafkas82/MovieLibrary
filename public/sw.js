@@ -4,11 +4,13 @@
 // touch requests to the local helper (cross-origin http://localhost:*) or any
 // API/SSE calls — those must always hit the live helper.
 
-const CACHE = 'movielib-shell-v1';
+const CACHE = 'movielib-shell-v2';
 const SHELL = [
   '/',
   '/index.html',
   '/app.js',
+  '/auth.js',
+  '/firebase-config.js',
   '/style.css',
   '/manifest.webmanifest',
   '/icons/icon.svg',

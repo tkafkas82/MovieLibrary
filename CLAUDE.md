@@ -42,9 +42,12 @@ cross-device sync would be meaningless.
 - `server.js` — the helper: Express + REST/SSE endpoints; serves `public/`;
   CORS/PNA middleware + `GET /api/health` (returns `{app:'movielibrary-helper'}`)
   so a hosted UI can detect it.
-- `lib/scan.js` — recursive disk walk (`scanRoots`); skips system/junk dirs and
-  symlinks, swallows EACCES. `listDrives()` suggests roots per OS (Windows drive
-  letters / macOS `/Volumes` / Linux `/media`,`/mnt` + home).
+- `lib/scan.js` — recursive disk walk (`scanRoots`); skips system/junk dirs,
+  swallows EACCES. Follows directory junctions/symlinks (resolves via `stat`)
+  with a `visited` realpath set to prevent loops. `listDrives()` suggests roots
+  per OS (Windows drive letters / macOS `/Volumes` / Linux `/media`,`/mnt` +
+  home). When no `scanRoots` are set, `/api/scan/stream` scans `listDrives()`
+  (the whole computer).
 - `lib/parse.js` — `parseMovie(fileName)` → `{ title, year }`. Strips scene tags
   (resolution/source/codec/audio/group). Uses the **last** plausible year token
   so year-titled films (`Blade Runner 2049 (2017)`, `1917 (2019)`) parse right.
@@ -60,6 +63,13 @@ cross-device sync would be meaningless.
   the helper is unreachable it shows an offline setup screen.
 - `vercel.json` — pins a pure-static deploy of `public/` (empty build/install
   commands; sets `sw.js`/manifest headers).
+- `public/auth.js` + `public/firebase-config.js` — OPTIONAL Google sign-in +
+  settings sync (Firebase Auth + Firestore), exposed to `app.js` as
+  `window.MovieSync`. Self-disables unless `firebase-config.js` sets a real
+  `window.FIREBASE_CONFIG`. Syncs `{scanRoots, formats, omdbApiKey}` to
+  `users/<uid>`. On sign-in the cloud config is POSTed to the helper; on Save
+  it's written back. The OMDb key isn't readable client-side (helper hides it),
+  so it only reaches the cloud when the user saves Settings with a key typed.
 
 ## Data flow
 
