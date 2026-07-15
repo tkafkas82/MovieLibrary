@@ -361,18 +361,31 @@ app.post('/api/rematch', async (req, res) => {
 });
 
 // ── open / reveal (cross-platform) ────────────────────────────────────────
-// Launch a file in the OS default app, or reveal it in the file manager.
-// Windows: explorer.exe / explorer.exe /select,  ·  macOS: open / open -R  ·
-// Linux: xdg-open (reveal falls back to opening the containing folder).
+// Launch a file in the OS default app, or reveal it in the file manager, and
+// bring that app to the foreground (a background helper otherwise just flashes
+// the taskbar on Windows). macOS `open` and `open -R` already activate the
+// target; Linux depends on the window manager.
 function launch(p, { reveal }) {
   const plat = process.platform;
+
   if (plat === 'win32') {
-    // explorer often exits non-zero even on success — fire and forget.
-    return spawn('explorer.exe', reveal ? ['/select,' + p] : [p], { detached: true, stdio: 'ignore' });
+    if (reveal) return spawn('explorer.exe', ['/select,' + p], { detached: true, stdio: 'ignore' });
+    // Open in the default player, then focus it. Windows blocks a background
+    // process from stealing focus, so we launch via PowerShell and use
+    // AppActivate (best-effort) to raise the new window.
+    const psPath = "'" + p.replace(/'/g, "''") + "'";
+    const cmd =
+      "$ErrorActionPreference='SilentlyContinue';" +
+      `$pr = Start-Process -FilePath ${psPath} -PassThru;` +
+      'Start-Sleep -Milliseconds 500;' +
+      'if ($pr -and -not $pr.HasExited) { (New-Object -ComObject WScript.Shell).AppActivate($pr.Id) | Out-Null }';
+    return spawn('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', cmd], { detached: true, stdio: 'ignore' });
   }
+
   if (plat === 'darwin') {
     return spawn('open', reveal ? ['-R', p] : [p], { detached: true, stdio: 'ignore' });
   }
+
   // linux / other — no universal "select in manager", so reveal opens the dir.
   return spawn('xdg-open', [reveal ? path.dirname(p) : p], { detached: true, stdio: 'ignore' });
 }

@@ -83,9 +83,12 @@ cross-device sync would be meaningless.
    Rate-limited (~120ms/lookup) for the free tier; aborts on 401 (bad key).
 4. **Library** (`GET /api/library`) — the whole cached list for rendering.
 5. `POST /api/open` / `POST /api/reveal` — launch the file in the default player /
-   reveal it in the file manager, cross-platform (`launch()` in server.js):
-   Windows `explorer.exe [/select,]`, macOS `open [-R]`, Linux `xdg-open` (reveal
-   opens the containing dir).
+   reveal it in the file manager, cross-platform (`launch()` in server.js), and
+   bring it to the foreground. macOS `open`/`open -R` and Linux `xdg-open`
+   activate the target; Windows reveal uses `explorer.exe /select,`, while
+   **play** goes through PowerShell `Start-Process -PassThru` + `AppActivate`
+   (best-effort — Windows blocks a background process from stealing focus, and
+   single-instance players that hand off may still not raise).
 
 ## Notes / gotchas
 
