@@ -1,4 +1,4 @@
-# 🎬 MKV Movie Library
+# 🎬 Movie Library
 
 A web app that scans your disks for movie files, pulls IMDb details for each one, and serves a fast, searchable **poster-grid library** in your browser. It's an **installable PWA** you can run fully locally **or** host the UI in the cloud (Vercel) while a tiny local helper does the disk work on each PC.
 

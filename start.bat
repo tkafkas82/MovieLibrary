@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-REM ---- MKV Movie Library helper launcher ----
+REM ---- Movie Library helper launcher ----
 REM First run installs dependencies (only Express). Then starts the local
 REM helper (disk scanning + IMDb + open/reveal) and opens the library.
 REM
@@ -31,7 +31,7 @@ if not exist "node_modules" (
   )
 )
 
-echo Starting MKV Movie Library helper on http://localhost:%PORT%
+echo Starting Movie Library helper on http://localhost:%PORT%
 echo (Leave this window open. Close it to stop the helper.)
 set PORT=%PORT%
 node server.js

@@ -1,4 +1,4 @@
-// MKV Movie Library — local Express server.
+// Movie Library — local Express server.
 // Scans configured disk roots for .mkv files, parses title/year, enriches via
 // OMDb (IMDb data), caches to data/library.json, and serves a poster-grid UI.
 
@@ -524,7 +524,7 @@ function openBrowser(url) {
 
 const server = app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
-  console.log(`\n  🎬  MKV Movie Library helper v${VERSION} running at ${url}`);
+  console.log(`\n  🎬  Movie Library helper v${VERSION} running at ${url}`);
   if (PUBLIC_DIR) {
     console.log('      • Local app is served here — open the URL above, or');
     console.log('      • open your hosted (Vercel) UI; it will connect to this helper.\n');

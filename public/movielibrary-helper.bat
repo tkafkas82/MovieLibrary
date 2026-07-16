@@ -1,6 +1,6 @@
 @echo off
 REM ==========================================================================
-REM  MKV Movie Library - Windows launcher (double-click me).
+REM  Movie Library - Windows launcher (double-click me).
 REM  Downloads the helper ONCE, then just re-runs it. Only re-downloads when a
 REM  newer release exists. curl-downloaded exe carries no "mark of the web", so
 REM  it won't trip SmartScreen the way a browser download does.

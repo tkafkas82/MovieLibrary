@@ -1,6 +1,6 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────
-# MKV Movie Library — macOS launcher (double-click me).
+# Movie Library — macOS launcher (double-click me).
 #
 # First run: right-click (Control-click) this file → Open → Open, to clear
 # Apple's "unidentified developer" warning. After that, a normal double-click

@@ -1,4 +1,4 @@
-// MKV Movie Library — frontend logic (vanilla JS). Handles standalone movies
+// Movie Library — frontend logic (vanilla JS). Handles standalone movies
 // and TV series (episodes grouped by season).
 
 const state = {

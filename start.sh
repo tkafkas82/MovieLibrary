@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ---- MKV Movie Library helper launcher (macOS / Linux) ----
+# ---- Movie Library helper launcher (macOS / Linux) ----
 # First run installs dependencies (only Express). Then starts the local helper
 # (disk scanning + IMDb + open/reveal) and opens the library in your browser.
 #
@@ -26,7 +26,7 @@ if [ ! -d node_modules ]; then
 fi
 
 URL="http://localhost:$PORT"
-echo "Starting MKV Movie Library helper on $URL"
+echo "Starting Movie Library helper on $URL"
 echo "(Leave this window open. Press Ctrl+C to stop the helper.)"
 
 # The server opens your browser itself when a local UI is present.

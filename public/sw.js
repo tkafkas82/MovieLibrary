@@ -1,10 +1,10 @@
-// Service worker for the MKV Movie Library PWA.
+// Service worker for the Movie Library PWA.
 // Caches only the static app shell (served from the host, e.g. Vercel) so the
 // UI opens instantly and works offline as a shell. It deliberately does NOT
 // touch requests to the local helper (cross-origin http://localhost:*) or any
 // API/SSE calls — those must always hit the live helper.
 
-const CACHE = 'movielib-shell-v13';
+const CACHE = 'movielib-shell-v14';
 const SHELL = [
   '/',
   '/index.html',

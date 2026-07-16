@@ -1,5 +1,5 @@
 {
-  "name": "MKV Movie Library",
+  "name": "Movie Library",
   "short_name": "Movies",
   "description": "Your personal movie & series library, matched to IMDb.",
   "start_url": "/",
