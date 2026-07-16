@@ -39,6 +39,15 @@ const VERSION = (typeof __APP_VERSION__ !== 'undefined') ? __APP_VERSION__ : (()
 const DEFAULT_OMDB_KEYS = ['48a56d4'];
 const effectiveKeys = (cfg) => (cfg.omdbApiKeys.length ? cfg.omdbApiKeys : DEFAULT_OMDB_KEYS);
 
+// Is `child` inside `parent`? Case-insensitive on Windows. Used to decide which
+// library entries a given scan root is responsible for (so pruning of deleted
+// files stays scoped to the folders actually scanned).
+function isUnder(child, parent) {
+  const norm = (s) => (process.platform === 'win32' ? String(s).toLowerCase() : String(s));
+  const rel = path.relative(norm(parent), norm(child));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 // Locate the static UI (`public/`). In dev it sits beside this file. As a
 // packaged binary the snapshot is read-only, so we look for a `public/` folder
 // on the real disk next to the executable. If none exists, the binary still
@@ -282,9 +291,24 @@ app.get('/api/scan/stream', async (_req, res) => {
       lib.movies[id] = entry;
       added += 1;
     }
+
+    // Prune entries whose files were deleted from disk. Only prune under roots
+    // that are accessible right now, so a disconnected/offline drive doesn't
+    // wipe its (still-valid) entries.
+    const accessibleRoots = roots.filter((r) => { try { return fs.existsSync(r); } catch { return false; } });
+    const foundIds = new Set(files.map((f) => idForPath(f.path)));
+    let removed = 0;
+    for (const id of Object.keys(lib.movies)) {
+      if (foundIds.has(id)) continue;
+      if (accessibleRoots.some((r) => isUnder(lib.movies[id].path, r))) { delete lib.movies[id]; removed += 1; }
+    }
+    // Drop series records that have no episodes left after pruning.
+    const liveKeys = new Set(Object.values(lib.movies).filter((e) => e.kind === 'episode').map((e) => e.seriesKey));
+    for (const k of Object.keys(lib.series)) if (!liveKeys.has(k)) delete lib.series[k];
+
     saveLibrary(lib);
     const g = groupedLibrary(lib);
-    send('done', { added, reclassified, scanned: files.length, movies: g.movies.length, series: g.series.length });
+    send('done', { added, removed, reclassified, scanned: files.length, movies: g.movies.length, series: g.series.length });
   } catch (err) {
     send('error', { message: err.message || 'Scan failed' });
   }

@@ -229,7 +229,6 @@ function renderStats() {
   if (s) bits.push(`${s} series`);
   const total = m + s;
   $('stats').textContent = total ? `${bits.join(' · ')} · ${matched} matched to IMDb` : '';
-  $('enrichBtn').disabled = !total;
 }
 
 function renderGenreOptions() {
@@ -524,15 +523,18 @@ function startScan() {
       else if (d.event === 'done') {
         endStream(es);
         await loadLibrary();
-        toast(`Scan complete — ${d.added} new · ${d.movies} movies, ${d.series} series.`);
-        if ((d.movies || d.series) && !state.config.hasApiKey) toast('Add an OMDb key in Settings, then click Fetch IMDb.');
+        const bits = [`${d.added} new`];
+        if (d.removed) bits.push(`${d.removed} removed`);
+        toast(`Scan complete — ${bits.join(' · ')} · ${d.movies} movies, ${d.series} series.`);
+        // Fetch IMDb automatically for anything not yet enriched — no separate button.
+        if (allItems().some((it) => !it.enriched)) startEnrich({ auto: true });
       } else if (d.event === 'error') { endStream(es); alert(d.message); }
     },
   });
 }
 
-function startEnrich() {
-  if (!state.config.hasApiKey) { alert('Add your free OMDb API key in Settings first.'); openSettings(); return; }
+function startEnrich(opts = {}) {
+  if (!state.config.hasApiKey) { if (opts.auto) return; alert('Add your free OMDb API key in Settings first.'); openSettings(); return; }
   setBusy(true);
   startStream('/api/enrich/stream', {
     label: 'Fetching IMDb…',
@@ -563,7 +565,7 @@ function setProgress(frac, text) {
   else { fill.classList.remove('indeterminate'); fill.style.width = Math.round(frac * 100) + '%'; }
   if (text != null) $('progressText').textContent = text;
 }
-function setBusy(b) { $('scanBtn').disabled = b; $('enrichBtn').disabled = b || !allItems().length; }
+function setBusy(b) { $('scanBtn').disabled = b; }
 
 // ── settings ──────────────────────────────────────────────────────────────
 function openSettings() {
@@ -792,7 +794,6 @@ async function promptInstall() {
 
 function wireEvents() {
   $('scanBtn').onclick = startScan;
-  $('enrichBtn').onclick = startEnrich;
   $('settingsBtn').onclick = openSettings;
   $('installBtn').onclick = promptInstall;
 

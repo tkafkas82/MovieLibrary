@@ -87,9 +87,13 @@ cross-device sync would be meaningless.
    `/api/config` reports `usingDefaultKey` so the UI can nudge users to add their
    own. (The default is a single free key shared by everyone — public in the
    repo/binary — so its 1000/day cap goes fast.)
-2. **Scan** (`GET /api/scan/stream`, SSE) — walks roots, adds new files to the
-   library (parsed title/year, `enriched:false`), refreshes existing entries.
-3. **Fetch IMDb** (`GET /api/enrich/stream`, SSE) — for each un-enriched movie
+2. **Scan** (`GET /api/scan/stream`, SSE) — walks roots, adds new files, refreshes
+   existing, and **prunes entries whose files were deleted** — but only under
+   scan roots that are accessible right now (`fs.existsSync` + `isUnder`), so a
+   disconnected/offline drive never wipes its entries. Reports `removed`. The UI
+   **auto-runs enrichment when the scan finishes** (there's no separate button).
+3. **Fetch IMDb** (`GET /api/enrich/stream`, SSE) — auto-triggered after a scan;
+   for each un-enriched movie
    (or all, with `?force=1`), calls OMDb via a rotating **key pool**
    (`createKeyPool` in omdb.js): when a key hits its 1000/day cap
    ("Request limit reached!") or is invalid (401), it advances to the next key.

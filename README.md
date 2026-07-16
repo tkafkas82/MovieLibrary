@@ -15,7 +15,8 @@ A web app that scans your disks for movie files, pulls IMDb details for each one
 
 - **📁 Disk scanning** — recursively walks every subfolder of the drives/folders you configure (following directory junctions/symlinks, with loop protection), finds `.mkv` (or any extensions you add), and skips system/junk directories. **No folder set? It scans your whole computer.**
 - **🧠 Smart filename parsing** — strips scene tags (resolution, source, codec, audio, release group) and extracts the real **title + year**, handling tricky year-titled films like `1917 (2019)` and `Blade Runner 2049`.
-- **🎞️ IMDb enrichment** — looks each movie up on the [OMDb API](https://www.omdbapi.com/) (IMDb data) for **rating, director, genre, plot, and poster**.
+- **🎞️ Automatic IMDb enrichment** — scanning **fetches IMDb data right away** (rating, director, genre, plot, poster via the [OMDb API](https://www.omdbapi.com/)); no separate button.
+- **🧹 Self-cleaning library** — files you delete from disk are **removed on the next scan** (entries on a disconnected/offline drive are kept, not wiped).
 - **🖼️ Poster-grid UI** — a responsive, searchable library that renders straight from a local cache. Zero build step, plain HTML/CSS/JS.
 - **▶️ Open & reveal** — launch a movie in your default player or reveal it in Explorer, right from the browser.
 - **⚡ Live progress** — scanning and enrichment stream progress over Server-Sent Events, so you watch the library fill in real time.
