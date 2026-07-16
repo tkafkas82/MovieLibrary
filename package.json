@@ -1,6 +1,6 @@
 {
   "name": "mkv-movie-library",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "App that scans your disks for movie files (.mkv, .mp4) and builds a poster library with IMDb details (via OMDb).",
   "type": "module",
   "private": true,

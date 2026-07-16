@@ -101,17 +101,15 @@ cross-device sync would be meaningless.
    (~120ms/lookup).
 4. **Library** (`GET /api/library`) — the whole cached list for rendering.
 5. `POST /api/open` / `POST /api/reveal` — launch the file in the default player /
-   reveal it in the file manager, cross-platform (`launch()` in server.js), and
-   bring it to the foreground. macOS `open`/`open -R` and Linux `xdg-open`
-   activate the target; Windows reveal uses `explorer.exe /select,`. Windows
-   **play** opens via `explorer.exe <path>` (ShellExecute — reliable for every
-   association incl. UWP "Films & TV"; `Start-Process -PassThru` silently FAILS
-   for those, which broke opening in v1.0.2–1.0.3). A SEPARATE best-effort
-   PowerShell step (`foregroundPs`, passed via `-EncodedCommand` to dodge
-   quoting) then polls up to 8s for the player window (title contains the file's
-   base name) and forces it foreground via the `AttachThreadInput` trick
-   (plain `AppActivate`/`SetForegroundWindow` are blocked for a background
-   process — they only flash the taskbar). Never blocks the open.
+   reveal it in the file manager, cross-platform (`launch()` in server.js), using
+   ONLY plain shell openers: Windows `explorer.exe [/select,]`, macOS
+   `open [-R]`, Linux `xdg-open`. ⚠️ v1.0.5–1.0.11 added a Windows focus-stealing
+   step — an `-EncodedCommand` PowerShell that runtime-`Add-Type`d user32
+   P/Invokes (`SetForegroundWindow`/`AttachThreadInput`). Kaspersky's behavioral
+   engine flagged the running helper as **PDM:Trojan.Win32.Generic** for exactly
+   that (background process + encoded PS + foreground-window injection = malware
+   pattern). REMOVED in v1.0.12. Do NOT reintroduce encoded/runtime-compiled
+   PowerShell or window-injection in the helper — it trips heuristic AV.
 
 ## Notes / gotchas
 

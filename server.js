@@ -418,77 +418,24 @@ app.post('/api/rematch', async (req, res) => {
 });
 
 // ── open / reveal (cross-platform) ────────────────────────────────────────
-// Launch a file in the OS default app, or reveal it in the file manager, and
-// bring that app to the foreground (a background helper otherwise just flashes
-// the taskbar on Windows). macOS `open` and `open -R` already activate the
-// target; Linux depends on the window manager.
+// Open a file in the OS default app, or reveal it in the file manager.
+// We deliberately keep this to plain shell "open" calls — NO PowerShell
+// window-foregrounding trick. Forcing another window to the foreground needs
+// SetForegroundWindow via a runtime-compiled user32 P/Invoke, launched through
+// an encoded PowerShell command — which is indistinguishable from malware to
+// heuristic antivirus (Kaspersky flagged exactly that). The player still opens;
+// macOS/Linux `open`/`xdg-open` foreground it naturally, and on Windows explorer
+// usually brings it forward too.
 function launch(p, { reveal }) {
   const plat = process.platform;
-
   if (plat === 'win32') {
-    if (reveal) return spawn('explorer.exe', ['/select,' + p], { detached: true, stdio: 'ignore' });
-    // Open with the default app via explorer (ShellExecute) — reliable for every
-    // association, including UWP apps like "Films & TV" (Start-Process -PassThru
-    // silently fails for those). Then, as a SEPARATE best-effort step that can
-    // never block the open, force the player window to the foreground.
-    spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }).unref();
-    const base = path.basename(p).replace(/\.[^.]+$/, '');
-    if (base.length >= 2) {
-      const encoded = Buffer.from(foregroundPs(base), 'utf16le').toString('base64');
-      return spawn('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded], { detached: true, stdio: 'ignore' });
-    }
-    return spawn('explorer.exe', [p], { detached: true, stdio: 'ignore' }); // fallback: nothing to focus by
+    return spawn('explorer.exe', reveal ? ['/select,' + p] : [p], { detached: true, stdio: 'ignore' });
   }
-
   if (plat === 'darwin') {
     return spawn('open', reveal ? ['-R', p] : [p], { detached: true, stdio: 'ignore' });
   }
-
   // linux / other — no universal "select in manager", so reveal opens the dir.
   return spawn('xdg-open', [reveal ? path.dirname(p) : p], { detached: true, stdio: 'ignore' });
-}
-
-// PowerShell that waits for the player's window (title contains the file's
-// name) and forces it to the foreground. Windows blocks a background process
-// from calling SetForegroundWindow, so we attach our thread to the current
-// foreground thread's input first — the documented workaround. Passed to
-// powershell via -EncodedCommand, so `base` needs no shell-escaping.
-function foregroundPs(base) {
-  const lit = "'" + base.replace(/'/g, "''") + "'"; // PS single-quoted literal
-  return `
-$ErrorActionPreference='SilentlyContinue'
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public static class Fg {
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
-  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int n);
-  [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
-  [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool f);
-  [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
-}
-'@
-$base = ${lit}
-$proc = $null
-$deadline = (Get-Date).AddSeconds(8)
-do {
-  Start-Sleep -Milliseconds 300
-  $proc = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like ('*' + $base + '*') } | Select-Object -First 1
-} while (-not $proc -and (Get-Date) -lt $deadline)
-if ($proc) {
-  $h = $proc.MainWindowHandle
-  $fg = [Fg]::GetForegroundWindow()
-  $fgThread = [Fg]::GetWindowThreadProcessId($fg, [IntPtr]::Zero)
-  $me = [Fg]::GetCurrentThreadId()
-  [Fg]::AttachThreadInput($me, $fgThread, $true) | Out-Null
-  [Fg]::ShowWindowAsync($h, 9) | Out-Null   # SW_RESTORE
-  [Fg]::BringWindowToTop($h) | Out-Null
-  [Fg]::SetForegroundWindow($h) | Out-Null
-  [Fg]::AttachThreadInput($me, $fgThread, $false) | Out-Null
-}
-`;
 }
 
 function openHandler(reveal) {
@@ -512,11 +459,13 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ error: err.message || 'Server error' });
 });
 
-// Best-effort "open my default browser at this URL", cross-platform.
+// Best-effort "open my default browser at this URL", cross-platform. Uses plain
+// openers (explorer/open/xdg-open) — no `cmd /c` shell spawn — to keep the
+// helper's behavior unremarkable to antivirus heuristics.
 function openBrowser(url) {
   try {
     const plat = process.platform;
-    if (plat === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+    if (plat === 'win32') spawn('explorer.exe', [url], { detached: true, stdio: 'ignore' }).unref();
     else if (plat === 'darwin') spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
     else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
   } catch { /* ignore — just print the URL */ }
