@@ -32,6 +32,13 @@ jobs:
           codesign --force --sign - dist/movielibrary-helper-macos-arm64
           codesign --force --sign - dist/movielibrary-helper-macos-x64
 
+      # Zip the macOS launcher so the executable bit survives download (a raw
+      # .command served over the web loses +x → "no access privileges" error).
+      - name: Package macOS launcher (.command in a zip, +x preserved)
+        run: |
+          chmod +x public/movielibrary-helper.command
+          (cd public && zip -X ../dist/movielibrary-helper-mac.zip movielibrary-helper.command)
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -42,6 +49,7 @@ jobs:
             dist/movielibrary-helper-macos-x64 \
             dist/movielibrary-helper-macos-arm64 \
             dist/movielibrary-helper-linux-x64 \
+            dist/movielibrary-helper-mac.zip \
             public/movielibrary-helper.command \
             public/movielibrary-helper.bat"
           # Create the release (first run), or just (re)upload assets if the tag

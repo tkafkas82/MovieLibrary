@@ -1,6 +1,6 @@
 {
   "name": "mkv-movie-library",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Local webpage that scans your disks for .mkv movies and builds a poster library with IMDb details (via OMDb).",
   "type": "module",
   "private": true,

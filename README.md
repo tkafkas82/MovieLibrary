@@ -142,10 +142,13 @@ The binary writes its cache to a `data/` folder **next to the executable**, so k
 > with `curl` (no browser "mark of the web"/quarantine), which is what avoids SmartScreen /
 > Gatekeeper on the binary.
 >
-> **macOS — easiest:** use the double-click launcher `public/movielibrary-helper.command`
-> (the site's setup screen offers it as "Download launcher for macOS"). It `curl`-downloads
-> the right binary for the Mac — and because `curl` downloads aren't quarantined, this sidesteps
-> Gatekeeper entirely. The only one-time step is **right-click → Open** on the `.command` itself.
+> **macOS — easiest:** the site's setup screen offers "Download launcher for macOS", a **zip**
+> containing `movielibrary-helper.command` (zipped so the executable bit survives download — a
+> raw `.command` served over the web loses `+x` and macOS refuses to run it). Unzip, then
+> **right-click → Open** the `.command` once. It `curl`-downloads the right binary (curl downloads
+> aren't quarantined, so this sidesteps Gatekeeper on the binary). The setup screen also shows a
+> **copy-paste Terminal one-liner** as a no-clicking alternative. The zip is built on the macOS CI
+> runner (`zip -X`, which preserves `+x`).
 >
 > **macOS — raw binary:** binaries cross-built in CI are ad-hoc signed but not *notarized*
 > (no paid Apple Developer ID), so a browser-downloaded binary is quarantined. Clear it once:

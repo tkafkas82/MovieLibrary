@@ -677,30 +677,39 @@ function paintDownloads(tag) {
   // Windows & macOS get a smart double-click launcher (served by this site): it
   // downloads the right binary once, auto-updates only on a new release, and
   // otherwise just re-runs the cached copy.
-  const LAUNCHER = {
-    win: {
-      href: '/movielibrary-helper.bat', label: 'launcher for Windows',
-      note: `Double-click <code>movielibrary-helper.bat</code>. If Windows shows a
-        "Windows protected your PC" prompt, click <b>More info → Run anyway</b> (one time).
-        It downloads the helper the first time, then just re-runs it (updating only when a
-        new version ships). Leave the window open.`,
-    },
-    mac: {
-      href: '/movielibrary-helper.command', label: 'launcher for macOS',
-      note: `Double-click <code>movielibrary-helper.command</code>. <b>First time only:</b>
-        right-click (Control-click) it in Finder → <b>Open</b> → <b>Open</b> — that clears
-        Apple's "unidentified developer" warning. It downloads the helper the first time, then
-        just re-runs it (updating only when a new version ships). Leave the window open.`,
-    },
-  };
-  const which = primaryKey === 'win' ? LAUNCHER.win
-    : (primaryKey === 'macArm' || primaryKey === 'macIntel') ? LAUNCHER.mac : null;
+  const isMac = primaryKey === 'macArm' || primaryKey === 'macIntel';
+  const isWin = primaryKey === 'win';
 
-  if (which) {
+  if (isWin) {
     box.innerHTML = `
-      <a class="btn download-primary" href="${which.href}" download>⬇ Download ${which.label}${ver}</a>
+      <a class="btn download-primary" href="/movielibrary-helper.bat" download>⬇ Download launcher for Windows${ver}</a>
       <div class="download-others">Advanced — raw binaries: ${rawList}</div>`;
-    if (help) help.innerHTML = `<summary>How it works</summary><div class="run-note">${which.note}</div>`;
+    if (help) help.innerHTML = `<summary>How it works</summary><div class="run-note">
+      Double-click <code>movielibrary-helper.bat</code>. If Windows shows a "Windows protected
+      your PC" prompt, click <b>More info → Run anyway</b> (one time). It downloads the helper the
+      first time, then just re-runs it (updating only when a new version ships). Leave the window open.</div>`;
+    return;
+  }
+
+  if (isMac) {
+    // The launcher ships inside a .zip so the executable bit survives download.
+    const oneLiner = `A=$([ "$(uname -m)" = arm64 ] && echo arm64 || echo x64); curl -fL "https://github.com/${GH_REPO}/releases/latest/download/movielibrary-helper-macos-$A" -o ~/movielibrary-helper && chmod +x ~/movielibrary-helper && ~/movielibrary-helper`;
+    box.innerHTML = `
+      <a class="btn download-primary" href="${dlUrl(tag, 'movielibrary-helper-mac.zip')}" download>⬇ Download launcher for macOS${ver}</a>
+      <div class="download-others">Advanced — raw binaries: ${rawList}</div>`;
+    if (help) {
+      help.innerHTML = `<summary>How to run it on macOS</summary><div class="run-note">
+        <b>Double-click the downloaded <code>.zip</code></b> to unzip it, then <b>right-click</b>
+        (Control-click) <code>movielibrary-helper.command</code> → <b>Open</b> → <b>Open</b>
+        (one-time — clears Apple's "unidentified developer" warning). It downloads the helper and
+        starts it; leave the window open.
+        <div class="oneliner">Prefer no clicking around? Paste this into <b>Terminal</b> instead:
+          <pre id="macOneLiner">${esc(oneLiner)}</pre>
+          <button class="btn tiny" id="copyOneLiner">Copy command</button>
+        </div></div>`;
+      const cp = $('copyOneLiner');
+      if (cp) cp.onclick = () => { navigator.clipboard?.writeText(oneLiner); cp.textContent = 'Copied!'; };
+    }
     return;
   }
 

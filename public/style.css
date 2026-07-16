@@ -290,3 +290,11 @@ body.offline .toolbar, body.offline #grid, body.offline #empty { display: none !
 }
 .update-chip:hover { filter: brightness(1.08); }
 @keyframes pulse-chip { 0%,100% { opacity: 1; } 50% { opacity: .72; } }
+
+/* macOS Terminal one-liner fallback in the run-help */
+.oneliner { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.oneliner pre {
+  background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0; overflow-x: auto; white-space: pre;
+  font-size: .82em; color: var(--text); user-select: all;
+}
