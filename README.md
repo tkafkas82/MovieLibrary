@@ -208,7 +208,7 @@ Config is set from the in-app **Settings** panel and stored server-side in `data
 | Setting | Description | Default |
 | --- | --- | --- |
 | `scanRoots` | Folders/drives to scan recursively | _(none — set in Settings)_ |
-| `formats` | File extensions to include | `[".mkv"]` |
+| `formats` | File extensions to include | `[".mkv", ".mp4"]` |
 | `omdbApiKeys` | One or more OMDb API keys (one per line in Settings). When one hits its 1,000/day cap, enrichment **automatically rotates** to the next. | `[]` |
 
 The server also honours a `PORT` environment variable (default `4700`).

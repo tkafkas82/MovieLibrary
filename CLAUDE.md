@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A **local** web app that scans your disks for movie files (`.mkv` by default),
+A **local** web app that scans your disks for movie files (`.mkv` + `.mp4` by default),
 parses a title + year from each filename, enriches them with IMDb details via
 the **OMDb API**, caches everything to a local JSON DB, and serves a searchable
 poster-grid library at `http://localhost:4700`.
