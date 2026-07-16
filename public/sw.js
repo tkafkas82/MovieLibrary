@@ -4,7 +4,7 @@
 // touch requests to the local helper (cross-origin http://localhost:*) or any
 // API/SSE calls — those must always hit the live helper.
 
-const CACHE = 'movielib-shell-v7';
+const CACHE = 'movielib-shell-v8';
 const SHELL = [
   '/',
   '/index.html',

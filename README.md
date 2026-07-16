@@ -135,6 +135,13 @@ npm run build     # cross-compiles all targets into ./dist
 
 The binary writes its cache to a `data/` folder **next to the executable**, so keep it somewhere writable.
 
+> **Easiest (both OSes) — smart double-click launchers.** The site's setup screen offers
+> `movielibrary-helper.bat` (Windows) / `movielibrary-helper.command` (macOS). Each downloads
+> the right helper **once**, then just re-runs the cached copy — re-downloading only when a
+> newer release exists. They're tiny scripts served by the site; the binary itself is fetched
+> with `curl` (no browser "mark of the web"/quarantine), which is what avoids SmartScreen /
+> Gatekeeper on the binary.
+>
 > **macOS — easiest:** use the double-click launcher `public/movielibrary-helper.command`
 > (the site's setup screen offers it as "Download launcher for macOS"). It `curl`-downloads
 > the right binary for the Mac — and because `curl` downloads aren't quarantined, this sidesteps

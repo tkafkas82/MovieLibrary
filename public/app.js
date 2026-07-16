@@ -670,31 +670,45 @@ function paintDownloads(tag) {
   const readme = $('readmeLink');
   if (readme) readme.href = `https://github.com/${GH_REPO}/releases/latest`;
 
-  // macOS: offer the double-click .command launcher (served by this site) — it
-  // curl-downloads the right binary (so it's never quarantined) and runs it.
-  if (primaryKey === 'macArm' || primaryKey === 'macIntel') {
+  // All four raw binaries, as a compact "Advanced" list.
+  const rawList = ['macArm', 'macIntel', 'win', 'linux']
+    .map((k) => `<a href="${dlUrl(tag, HELPER_ASSETS[k].file)}" download>${HELPER_ASSETS[k].label}</a>`).join(' · ');
+
+  // Windows & macOS get a smart double-click launcher (served by this site): it
+  // downloads the right binary once, auto-updates only on a new release, and
+  // otherwise just re-runs the cached copy.
+  const LAUNCHER = {
+    win: {
+      href: '/movielibrary-helper.bat', label: 'launcher for Windows',
+      note: `Double-click <code>movielibrary-helper.bat</code>. If Windows shows a
+        "Windows protected your PC" prompt, click <b>More info → Run anyway</b> (one time).
+        It downloads the helper the first time, then just re-runs it (updating only when a
+        new version ships). Leave the window open.`,
+    },
+    mac: {
+      href: '/movielibrary-helper.command', label: 'launcher for macOS',
+      note: `Double-click <code>movielibrary-helper.command</code>. <b>First time only:</b>
+        right-click (Control-click) it in Finder → <b>Open</b> → <b>Open</b> — that clears
+        Apple's "unidentified developer" warning. It downloads the helper the first time, then
+        just re-runs it (updating only when a new version ships). Leave the window open.`,
+    },
+  };
+  const which = primaryKey === 'win' ? LAUNCHER.win
+    : (primaryKey === 'macArm' || primaryKey === 'macIntel') ? LAUNCHER.mac : null;
+
+  if (which) {
     box.innerHTML = `
-      <a class="btn download-primary" href="/movielibrary-helper.command" download>⬇ Download launcher for macOS${ver}</a>
-      <div class="download-others">Advanced — raw binaries:
-        <a href="${dlUrl(tag, HELPER_ASSETS.macArm.file)}" download>Apple Silicon</a> ·
-        <a href="${dlUrl(tag, HELPER_ASSETS.macIntel.file)}" download>Intel</a> ·
-        <a href="${dlUrl(tag, HELPER_ASSETS.win.file)}" download>Windows</a> ·
-        <a href="${dlUrl(tag, HELPER_ASSETS.linux.file)}" download>Linux</a></div>`;
-    if (help) help.innerHTML = `<summary>How to run it on macOS</summary><div class="run-note">
-      Double-click <code>movielibrary-helper.command</code>. <b>First time only:</b> right-click
-      (Control-click) it in Finder → <b>Open</b> → <b>Open</b> — that clears Apple's
-      "unidentified developer" warning. It then downloads the right helper for your Mac and
-      starts it; leave the window open.</div>`;
+      <a class="btn download-primary" href="${which.href}" download>⬇ Download ${which.label}${ver}</a>
+      <div class="download-others">Advanced — raw binaries: ${rawList}</div>`;
+    if (help) help.innerHTML = `<summary>How it works</summary><div class="run-note">${which.note}</div>`;
     return;
   }
 
+  // Linux / fallback — raw binary.
   const primary = HELPER_ASSETS[primaryKey];
-  const otherKeys = Object.keys(HELPER_ASSETS).filter((k) => k !== primaryKey);
   box.innerHTML = `
     <a class="btn download-primary" href="${dlUrl(tag, primary.file)}" download>⬇ Download helper for ${primary.label}${ver}</a>
-    <div class="download-others">Other systems: ${
-      otherKeys.map((k) => `<a href="${dlUrl(tag, HELPER_ASSETS[k].file)}" download>${HELPER_ASSETS[k].label}</a>`).join(' · ')
-    }</div>`;
+    <div class="download-others">Other systems: ${rawList}</div>`;
   if (help) help.innerHTML = `<summary>How to run it on ${primary.label}</summary><div class="run-note">${primary.run}</div>`;
 }
 
