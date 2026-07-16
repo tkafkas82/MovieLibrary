@@ -156,20 +156,36 @@ function cmpSemver(a, b) {
 }
 
 async function checkForUpdate() {
+  const chip = $('updateChip');
+  if (!chip) return;
+  // Re-read the connected helper's version — it may have just been updated.
+  const health = await getHealth();
+  if (health && health.version) state.helperVersion = health.version;
   const cur = state.helperVersion;
-  if (!cur || cur === 'dev') return; // unknown/older helper or local dev — skip
+  if (!cur || cur === 'dev') { chip.hidden = true; return; } // unknown/older helper or dev
   const tag = await fetchLatestTag();
-  if (!tag) return;
-  if (cmpSemver(tag.replace(/^v/, ''), cur) > 0) {
-    const chip = $('updateChip');
-    if (chip) {
-      chip.hidden = false;
-      chip.textContent = `⬆ Update helper → ${tag}`;
-      chip.href = `https://github.com/${GH_REPO}/releases/latest`;
-      chip.title = `Your helper is v${cur}. Newer: ${tag}. Click for the download.`;
-    }
-    toast(`A newer helper is available (${tag}). You're on v${cur}.`);
-  }
+  if (!tag) return; // offline / rate-limited — leave the chip as-is
+  if (cmpSemver(tag.replace(/^v/, ''), cur) <= 0) { chip.hidden = true; return; } // up to date → hide
+
+  const wasHidden = chip.hidden;
+  chip.hidden = false;
+  chip.textContent = `⬆ Update helper → ${tag}`;
+  // Behave like the download button: fetch the right launcher/binary for this
+  // OS (not a GitHub page). Same-origin .bat downloads via the `download` attr;
+  // GitHub assets are served as attachments so they download too.
+  chip.href = osDownloadHref(tag);
+  chip.setAttribute('download', '');
+  chip.title = `Download the updated helper for your system (you're on v${cur}). Run it, then restart the helper.`;
+  if (wasHidden) toast(`A newer helper is available (${tag}). Click "Update helper" to download it.`);
+}
+
+// The download target for the current OS — mirrors the setup screen's button:
+// Windows → the .bat launcher; macOS → the launcher zip; Linux → the binary.
+function osDownloadHref(tag) {
+  const os = detectOS();
+  if (os === 'win') return '/movielibrary-helper.bat';
+  if (os === 'macArm' || os === 'macIntel') return dlUrl(tag, 'movielibrary-helper-mac.zip');
+  return dlUrl(tag, HELPER_ASSETS.linux.file);
 }
 
 async function loadConfig() { state.config = await api('/api/config'); }
@@ -779,6 +795,13 @@ function wireEvents() {
   $('enrichBtn').onclick = startEnrich;
   $('settingsBtn').onclick = openSettings;
   $('installBtn').onclick = promptInstall;
+
+  // When an update is pending and the user comes back to the tab (e.g. after
+  // running the new helper), re-check so the "Update helper" chip disappears
+  // once the helper actually reports the new version.
+  const recheckUpdate = () => { const c = $('updateChip'); if (c && !c.hidden && !document.hidden) checkForUpdate(); };
+  window.addEventListener('focus', recheckUpdate);
+  document.addEventListener('visibilitychange', recheckUpdate);
 
   // Offline / helper-connection screen.
   $('helperRetry').onclick = () => {
