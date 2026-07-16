@@ -21,6 +21,8 @@
     _state() { return { signedIn: !!this.user, email: this.user && this.user.email, config: this.cloudConfig }; },
     _emit() { const s = this._state(); this._handlers.forEach((h) => { try { h(s); } catch (e) { console.error(e); } }); },
     async signIn() {}, async signOut() {}, async save() {},
+    async saveList() { return null; }, async listLists() { return []; },
+    async getList() { return null; }, async deleteList() {},
   };
   window.MovieSync = M;
   if (!configured) return;
@@ -31,13 +33,15 @@
   (async () => {
     const { initializeApp } = await import(cdn('app'));
     const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = await import(cdn('auth'));
-    const { getFirestore, doc, getDoc, setDoc, serverTimestamp } = await import(cdn('firestore'));
+    const { getFirestore, doc, getDoc, setDoc, serverTimestamp,
+      collection, getDocs, addDoc, deleteDoc } = await import(cdn('firestore'));
 
     const app = initializeApp(cfg);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const provider = new GoogleAuthProvider();
     const userDoc = () => doc(db, 'users', auth.currentUser.uid);
+    const listsCol = () => collection(db, 'users', auth.currentUser.uid, 'lists');
 
     M.signIn = () => signInWithPopup(auth, provider).catch((e) => {
       console.error(e);
@@ -58,6 +62,29 @@
         await setDoc(userDoc(), data, { merge: true });
         M.cloudConfig = { ...(M.cloudConfig || {}), ...data };
       } catch (e) { console.error('cloud save failed', e); }
+    };
+
+    // ── saved lists (users/<uid>/lists/<id>: { name, data:{movies,series} }) ──
+    M.saveList = async (name, data) => {
+      if (!auth.currentUser) throw new Error('Not signed in');
+      const ref = await addDoc(listsCol(), { name: String(name).trim() || 'Untitled', data, updatedAt: serverTimestamp() });
+      return ref.id;
+    };
+    M.listLists = async () => {
+      if (!auth.currentUser) return [];
+      const snap = await getDocs(listsCol());
+      return snap.docs
+        .map((d) => ({ id: d.id, name: d.data().name || 'Untitled' }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    };
+    M.getList = async (id) => {
+      if (!auth.currentUser) return null;
+      const d = await getDoc(doc(db, 'users', auth.currentUser.uid, 'lists', id));
+      return d.exists() ? (d.data().data || { movies: [], series: [] }) : null;
+    };
+    M.deleteList = async (id) => {
+      if (!auth.currentUser) return;
+      await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'lists', id));
     };
 
     onAuthStateChanged(auth, async (user) => {

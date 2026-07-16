@@ -297,3 +297,10 @@ body.offline .toolbar, body.offline #grid, body.offline #empty { display: none !
   padding: 10px 12px; margin: 8px 0; overflow-x: auto; white-space: pre;
   font-size: .82em; color: var(--text); user-select: all;
 }
+
+/* saved-list controls in the toolbar */
+.list-controls { display: flex; align-items: center; gap: 6px; }
+.list-controls select {
+  background: var(--bg-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: .9em; max-width: 200px;
+}

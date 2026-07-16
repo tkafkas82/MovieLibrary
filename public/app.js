@@ -9,6 +9,8 @@ const state = {
   stream: null,
   connected: false,
   helperVersion: null,
+  readonly: false,      // true while viewing a saved (cloud) list, not This PC
+  viewingListId: null,  // id of the saved list being viewed, or null for This PC
 };
 
 const $ = (id) => document.getElementById(id);
@@ -66,8 +68,98 @@ function initSync() {
   renderAuth({ signedIn: false });
   S.onState((st) => {
     renderAuth(st);
-    if (st.signedIn) maybeApplyCloud(st.config);
+    const lc = $('listControls');
+    if (st.signedIn) {
+      if (lc) lc.hidden = false;
+      maybeApplyCloud(st.config);
+      refreshLists();
+    } else {
+      if (lc) lc.hidden = true;
+      if (state.viewingListId) viewThisPC(); // signed out while viewing a cloud list
+    }
   });
+}
+
+// ── saved lists (cloud) ────────────────────────────────────────────────────
+// A snapshot of the current library for read-only viewing on any device. Strip
+// local paths / file stats — not needed for a read-only view, smaller, private.
+function listSnapshot() {
+  const strip = (o) => { const { path, size, mtime, ...rest } = o; return rest; };
+  return {
+    movies: state.movies.map(strip),
+    series: state.series.map((s) => ({
+      ...s,
+      seasons: (s.seasons || []).map((sea) => ({ season: sea.season, episodes: sea.episodes.map(strip) })),
+    })),
+  };
+}
+
+async function refreshLists() {
+  const sel = $('listSelect');
+  if (!sel || !window.MovieSync?.user) return;
+  let lists = [];
+  try { lists = await window.MovieSync.listLists(); } catch { return; }
+  sel.innerHTML = '<option value="">📍 This PC</option>' +
+    lists.map((l) => `<option value="${esc(l.id)}">📁 ${esc(l.name)}</option>`).join('');
+  const stillThere = state.viewingListId && lists.some((l) => l.id === state.viewingListId);
+  sel.value = stillThere ? state.viewingListId : '';
+  if (!stillThere && state.viewingListId) { viewThisPC(); return; }
+  $('deleteListBtn').hidden = !sel.value;
+}
+
+function resetToThisPCView() {
+  state.readonly = false;
+  state.viewingListId = null;
+  const sel = $('listSelect'); if (sel) sel.value = '';
+  const del = $('deleteListBtn'); if (del) del.hidden = true;
+  const sv = $('saveListBtn'); if (sv) sv.disabled = false;
+}
+
+async function viewThisPC() {
+  resetToThisPCView();
+  if (state.connected) await loadLibrary(); else render();
+}
+
+async function viewSavedList(id) {
+  let data;
+  try { data = await window.MovieSync.getList(id); }
+  catch (e) { toast('Could not load list: ' + (e.message || e)); return; }
+  if (!data) { toast('That list is empty or was deleted.'); refreshLists(); return; }
+  state.readonly = true;
+  state.viewingListId = id;
+  state.movies = data.movies || [];
+  state.series = data.series || [];
+  const del = $('deleteListBtn'); if (del) del.hidden = false;
+  const sv = $('saveListBtn'); if (sv) sv.disabled = true;
+  render();
+}
+
+function selectList(id) { return id ? viewSavedList(id) : viewThisPC(); }
+
+async function saveCurrentAsList() {
+  if (!window.MovieSync?.user) { toast('Sign in with Google first to save lists.'); return; }
+  if (state.readonly) return; // save snapshots This PC, not a viewed list
+  if (!allItems().length) { toast('Nothing to save yet — scan your library first.'); return; }
+  const name = prompt('Name this list (e.g. "Home PC", "Laptop"):', '');
+  if (name == null) return;
+  try {
+    await window.MovieSync.saveList(name || 'Untitled', listSnapshot());
+    await refreshLists();
+    toast(`Saved “${name || 'Untitled'}” to your account.`);
+  } catch (e) {
+    toast('Could not save the list: ' + (e.message || e) + (/longer than|exceeds|size/i.test(String(e.message)) ? ' (library too large for one cloud doc)' : ''));
+  }
+}
+
+async function deleteCurrentList() {
+  const id = state.viewingListId;
+  if (!id) return;
+  const label = $('listSelect').selectedOptions[0]?.textContent || 'this list';
+  if (!confirm(`Delete ${label} from your account? (Your files and This PC library are not affected.)`)) return;
+  try { await window.MovieSync.deleteList(id); } catch (e) { toast('Delete failed: ' + (e.message || e)); return; }
+  await viewThisPC();
+  await refreshLists();
+  toast('List deleted.');
 }
 
 function renderAuth(st) {
@@ -194,6 +286,7 @@ async function loadLibrary() {
   const data = await api('/api/library');
   state.movies = data.movies || [];
   state.series = data.series || [];
+  state.readonly = false; // the live This-PC library is always editable
   render();
 }
 
@@ -290,6 +383,17 @@ function movieCard(m) {
   const director = im?.director ? `<div class="card-sub">🎬 ${esc(im.director)}</div>` : '';
   const unmatched = !im ? `<div class="badge-un">${m.error ? 'not found' : 'not matched'}</div>` : '';
   const imdbLink = im?.imdbUrl ? `<a class="iconbtn" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">IMDb</a>` : '';
+  // Saved lists are read-only (the files aren't on this machine): only the IMDb
+  // link, no Play / Reveal / Fix-match / Remove, and no local path.
+  const actions = state.readonly
+    ? `<div class="actions">${imdbLink}</div>`
+    : `<div class="actions">
+        <button class="iconbtn" data-act="play" title="Open with default player">▶ Play</button>
+        <button class="iconbtn" data-act="reveal" title="Show in Explorer">📁</button>
+        ${imdbLink}
+        <button class="iconbtn" data-act="rematch" title="Fix IMDb match">🔗</button>
+        <button class="iconbtn x" data-act="remove" title="Remove from library">✕</button>
+      </div>`;
   return `<div class="card" data-id="${m.id}" data-kind="movie">
     <div class="poster">${posterHtml(im)}${noimg(title)}${ratingBadge(im)}${unmatched}</div>
     <div class="card-body">
@@ -297,14 +401,8 @@ function movieCard(m) {
       <div class="card-sub">${esc(String(year))}${runtime}</div>
       ${director}
       <div class="genres">${genreChips(im)}</div>
-      <div class="card-path" title="${esc(m.path)}">${esc(m.path)}</div>
-      <div class="actions">
-        <button class="iconbtn" data-act="play" title="Open with default player">▶ Play</button>
-        <button class="iconbtn" data-act="reveal" title="Show in Explorer">📁</button>
-        ${imdbLink}
-        <button class="iconbtn" data-act="rematch" title="Fix IMDb match">🔗</button>
-        <button class="iconbtn x" data-act="remove" title="Remove from library">✕</button>
-      </div>
+      ${state.readonly ? '' : `<div class="card-path" title="${esc(m.path)}">${esc(m.path)}</div>`}
+      ${actions}
     </div>
   </div>`;
 }
@@ -344,9 +442,10 @@ function openSeriesModal(s) {
       ${sea.episodes.map((ep) => `
         <div class="episode" data-id="${ep.id}">
           <span class="ep-num">${ep.episode != null ? 'E' + String(ep.episode).padStart(2, '0') : '—'}</span>
-          <span class="ep-name" title="${esc(ep.path)}">${esc(ep.fileName)}</span>
+          <span class="ep-name" title="${esc(ep.path || ep.fileName)}">${esc(ep.fileName)}</span>
+          ${state.readonly ? '' : `
           <button class="iconbtn tiny" data-act="play" title="Play">▶</button>
-          <button class="iconbtn tiny" data-act="reveal" title="Show in Explorer">📁</button>
+          <button class="iconbtn tiny" data-act="reveal" title="Show in Explorer">📁</button>`}
         </div>`).join('')}
     </div>`).join('');
 
@@ -362,8 +461,9 @@ function openSeriesModal(s) {
         ${im?.plot ? `<p class="plot">${esc(im.plot)}</p>` : ''}
         <div class="series-actions">
           ${im?.imdbUrl ? `<a class="btn ghost tiny" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">Open on IMDb</a>` : ''}
+          ${state.readonly ? '' : `
           <button class="btn ghost tiny" data-act="rematch-series" data-key="${esc(s.key)}">Fix match</button>
-          <button class="btn ghost tiny" data-act="remove-series" data-key="${esc(s.key)}">Remove series</button>
+          <button class="btn ghost tiny" data-act="remove-series" data-key="${esc(s.key)}">Remove series</button>`}
           <div class="spacer"></div>
           <button class="btn tiny" data-act="close-series">Close</button>
         </div>
@@ -514,6 +614,7 @@ function startScan() {
       return;
     }
   }
+  resetToThisPCView(); // scanning always operates on This PC — leave any saved-list view
   setBusy(true);
   startStream('/api/scan/stream', {
     label: 'Scanning…',
@@ -795,6 +896,9 @@ function wireEvents() {
   $('scanBtn').onclick = startScan;
   $('settingsBtn').onclick = openSettings;
   $('installBtn').onclick = promptInstall;
+  $('listSelect').onchange = (e) => selectList(e.target.value);
+  $('saveListBtn').onclick = saveCurrentAsList;
+  $('deleteListBtn').onclick = deleteCurrentList;
 
   // When an update is pending and the user comes back to the tab (e.g. after
   // running the new helper), re-check so the "Update helper" chip disappears

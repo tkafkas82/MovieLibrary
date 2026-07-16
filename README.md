@@ -23,6 +23,7 @@ A web app that scans your disks for movie files, pulls IMDb details for each one
 - **📲 Installable PWA** — install it as a standalone app (its own window, icon, and splash screen) from Chrome/Edge, on desktop or mobile.
 - **☁️ Host the UI, keep the data local** — deploy the UI to Vercel and open it from any PC; a small local **helper** does the disk scanning and file-opening on that machine. Your files never leave your computer.
 - **☁️ Optional Google sync** — sign in with Google to save your scan folders + OMDb key to your account and restore them on any PC (see below).
+- **🗂️ Saved lists** — signed-in users can save the current library as a named list (in the toolbar dropdown, default **"This PC"**) and browse their other saved lists read-only (Play/Reveal/edit are hidden, since those files aren't on this machine).
 - **🔒 Local-first** — files, config, cache, and API key always stay on your machine. The cloud only ever serves static HTML/CSS/JS; it never sees your disks.
 
 ---
@@ -182,7 +183,8 @@ One-time setup (~5 min, free):
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       match /users/{uid} {
+       // covers the user's settings doc AND their saved lists subcollection
+       match /users/{uid}/{document=**} {
          allow read, write: if request.auth != null && request.auth.uid == uid;
        }
      }

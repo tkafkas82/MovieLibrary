@@ -80,6 +80,13 @@
   </div>
 
   <section class="toolbar">
+    <div class="list-controls" id="listControls" hidden>
+      <select id="listSelect" title="Choose which library to view">
+        <option value="">📍 This PC</option>
+      </select>
+      <button class="btn ghost tiny" id="saveListBtn" title="Save the current library as a list in your account">＋ Save list</button>
+      <button class="btn ghost tiny" id="deleteListBtn" hidden title="Delete this saved list">🗑</button>
+    </div>
     <input type="search" id="search" placeholder="Search title, director…" />
     <select id="genre"><option value="">All genres</option></select>
     <select id="sort">
