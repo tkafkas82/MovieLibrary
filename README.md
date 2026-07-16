@@ -135,11 +135,17 @@ npm run build     # cross-compiles all targets into ./dist
 
 The binary writes its cache to a `data/` folder **next to the executable**, so keep it somewhere writable.
 
-> **macOS gatekeeper:** binaries cross-built off a Mac are unsigned, so macOS will quarantine them. On the Mac, run once:
+> **macOS — easiest:** use the double-click launcher `public/movielibrary-helper.command`
+> (the site's setup screen offers it as "Download launcher for macOS"). It `curl`-downloads
+> the right binary for the Mac — and because `curl` downloads aren't quarantined, this sidesteps
+> Gatekeeper entirely. The only one-time step is **right-click → Open** on the `.command` itself.
+>
+> **macOS — raw binary:** binaries cross-built in CI are ad-hoc signed but not *notarized*
+> (no paid Apple Developer ID), so a browser-downloaded binary is quarantined. Clear it once:
 > ```bash
 > xattr -dr com.apple.quarantine ./movielibrary-helper-macos-arm64
-> codesign --sign - ./movielibrary-helper-macos-arm64   # ad-hoc signature
 > chmod +x ./movielibrary-helper-macos-arm64
+> ./movielibrary-helper-macos-arm64      # run from Terminal — don't double-click in Finder
 > ```
 > (On Linux, `chmod +x` the binary before running.)
 

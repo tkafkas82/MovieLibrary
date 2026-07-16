@@ -41,7 +41,8 @@ jobs:
           FILES="dist/movielibrary-helper-win-x64.exe \
             dist/movielibrary-helper-macos-x64 \
             dist/movielibrary-helper-macos-arm64 \
-            dist/movielibrary-helper-linux-x64"
+            dist/movielibrary-helper-linux-x64 \
+            public/movielibrary-helper.command"
           # Create the release (first run), or just (re)upload assets if the tag
           # already has one. --clobber is valid on `upload`, not on `create`.
           gh release create "$TAG" $FILES \
