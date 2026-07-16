@@ -11,6 +11,11 @@ REPO="tkafkas82/MovieLibrary"
 DIR="$HOME/.movielibrary"
 mkdir -p "$DIR"
 
+# Stop any previous helper first, so the new one can bind the port (and so an
+# update actually takes effect instead of the old process staying alive).
+pkill -f "movielibrary-helper-macos" 2>/dev/null || true
+sleep 1
+
 case "$(uname -m)" in
   arm64) ARCH="arm64" ;;
   *)     ARCH="x64" ;;

@@ -522,7 +522,7 @@ function openBrowser(url) {
   } catch { /* ignore — just print the URL */ }
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\n  🎬  MKV Movie Library helper v${VERSION} running at ${url}`);
   if (PUBLIC_DIR) {
@@ -534,4 +534,17 @@ app.listen(PORT, () => {
     console.log('      • API-only helper (no local UI folder found).');
     console.log('      • Open your hosted (Vercel) UI; it will connect to this helper.\n');
   }
+});
+
+// If the port is taken, an OLD helper (or another app) is already running —
+// make that obvious instead of failing silently, which is what left people on
+// a stale version after an "update".
+server.on('error', (e) => {
+  if (e && e.code === 'EADDRINUSE') {
+    console.error(`\n  ⚠  Port ${PORT} is already in use — another Movie Library helper is`);
+    console.error('     probably still running. Close that window first, then start this one');
+    console.error(`     again. (Or use a different port: set PORT=4701 before launching.)\n`);
+    process.exit(1);
+  }
+  throw e;
 });

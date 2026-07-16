@@ -12,6 +12,11 @@ set "DIR=%LOCALAPPDATA%\MovieLibrary"
 set "BIN=%DIR%\movielibrary-helper-win-x64.exe"
 if not exist "%DIR%" mkdir "%DIR%"
 
+REM Stop any previous helper first, so the port is free to rebind AND the .exe
+REM isn't locked (Windows won't overwrite a running executable during update).
+taskkill /F /IM movielibrary-helper-win-x64.exe >nul 2>&1
+timeout /t 1 /nobreak >nul 2>&1
+
 REM Latest release tag (blank if offline / rate-limited)
 set "LATEST="
 for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "try{(Invoke-RestMethod 'https://api.github.com/repos/%REPO%/releases/latest').tag_name}catch{''}"`) do set "LATEST=%%v"
