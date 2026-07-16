@@ -78,14 +78,18 @@ cross-device sync would be meaningless.
 
 ## Data flow
 
-1. **Settings** (`POST /api/config`) — user sets `scanRoots`, `formats`, and the
-   OMDb API key. The key is stored server-side and never returned to the client
-   (`publicConfig()` exposes only `hasApiKey`).
+1. **Settings** (`POST /api/config`) — user sets `scanRoots`, `formats`, and
+   `omdbApiKeys` (an ARRAY; legacy single `omdbApiKey` is migrated in store.js).
+   `publicConfig()` now RETURNS `omdbApiKeys` (they're low-value and the UI needs
+   them to manage the list + sync to the user's Google account) plus `hasApiKey`.
 2. **Scan** (`GET /api/scan/stream`, SSE) — walks roots, adds new files to the
    library (parsed title/year, `enriched:false`), refreshes existing entries.
 3. **Fetch IMDb** (`GET /api/enrich/stream`, SSE) — for each un-enriched movie
-   (or all, with `?force=1`), calls OMDb, stores `movie.imdb`, streams progress.
-   Rate-limited (~120ms/lookup) for the free tier; aborts on 401 (bad key).
+   (or all, with `?force=1`), calls OMDb via a rotating **key pool**
+   (`createKeyPool` in omdb.js): when a key hits its 1000/day cap
+   ("Request limit reached!") or is invalid (401), it advances to the next key.
+   Once all keys are exhausted the run stops with a clear message. Rate-limited
+   (~120ms/lookup).
 4. **Library** (`GET /api/library`) — the whole cached list for rendering.
 5. `POST /api/open` / `POST /api/reveal` — launch the file in the default player /
    reveal it in the file manager, cross-platform (`launch()` in server.js), and

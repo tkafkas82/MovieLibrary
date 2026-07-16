@@ -208,11 +208,11 @@ Config is set from the in-app **Settings** panel and stored server-side in `data
 | --- | --- | --- |
 | `scanRoots` | Folders/drives to scan recursively | _(none — set in Settings)_ |
 | `formats` | File extensions to include | `[".mkv"]` |
-| `omdbApiKey` | Your OMDb API key (kept server-side, never sent to the browser) | _(none)_ |
+| `omdbApiKeys` | One or more OMDb API keys (one per line in Settings). When one hits its 1,000/day cap, enrichment **automatically rotates** to the next. | `[]` |
 
 The server also honours a `PORT` environment variable (default `4700`).
 
-> 🔐 **Your API key is never committed.** `data/config.json` and `data/library.json` are git-ignored, and the server only ever exposes `hasApiKey` to the client — not the key itself.
+> 🔑 **Multiple keys + rotation.** Add several free OMDb keys and the app fails over automatically when one is exhausted or invalid. Keys live in `data/config.json` (git-ignored) and, if you sign in with Google, sync to your account so they follow you across machines. (They're exposed to the local page — necessary for that sync/management — but OMDb keys are free and low-value.)
 
 ---
 

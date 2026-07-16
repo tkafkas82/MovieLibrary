@@ -46,14 +46,14 @@
     });
     M.signOut = () => signOut(auth).catch((e) => console.error(e));
 
-    // Write the given fields to the user's doc. omdbApiKey is only written when
-    // a non-empty value is supplied, so a save without a key never wipes it.
+    // Write the given fields to the user's doc (merge). Keys are stored as an
+    // array so the list — and its rotation order — survives across devices.
     M.save = async (config) => {
       if (!auth.currentUser) return;
       const data = { updatedAt: serverTimestamp() };
       if (Array.isArray(config.scanRoots)) data.scanRoots = config.scanRoots;
       if (Array.isArray(config.formats)) data.formats = config.formats;
-      if (typeof config.omdbApiKey === 'string' && config.omdbApiKey) data.omdbApiKey = config.omdbApiKey;
+      if (Array.isArray(config.omdbApiKeys)) data.omdbApiKeys = config.omdbApiKeys;
       try {
         await setDoc(userDoc(), data, { merge: true });
         M.cloudConfig = { ...(M.cloudConfig || {}), ...data };

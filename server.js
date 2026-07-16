@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 
 import { scanRoots, listDrives } from './lib/scan.js';
 import { parseEntry, seriesKeyOf } from './lib/parse.js';
-import { fetchOmdb, fetchOmdbById, parseImdbId } from './lib/omdb.js';
+import { fetchOmdb, fetchOmdbById, parseImdbId, createKeyPool } from './lib/omdb.js';
 import {
   loadConfig, saveConfig, publicConfig,
   loadLibrary, saveLibrary, idForPath, pathForId,
@@ -179,7 +179,7 @@ app.get('/api/config', (_req, res) => {
 });
 
 app.post('/api/config', (req, res) => {
-  const { scanRoots: roots, formats, omdbApiKey } = req.body || {};
+  const { scanRoots: roots, formats, omdbApiKey, omdbApiKeys } = req.body || {};
   const patch = {};
   if (Array.isArray(roots)) patch.scanRoots = roots.map((r) => String(r).trim()).filter(Boolean);
   if (Array.isArray(formats) && formats.length) {
@@ -188,8 +188,10 @@ app.post('/api/config', (req, res) => {
       return f.startsWith('.') ? f : '.' + f;
     });
   }
-  // Only overwrite the key when a value is supplied (empty string clears it).
-  if (typeof omdbApiKey === 'string') patch.omdbApiKey = omdbApiKey.trim();
+  // Accept a list of keys (new) or a single key (legacy). Only touch keys when
+  // one of these is supplied; store.js dedups/trims.
+  if (Array.isArray(omdbApiKeys)) patch.omdbApiKeys = omdbApiKeys;
+  else if (typeof omdbApiKey === 'string') patch.omdbApiKeys = omdbApiKey.trim() ? [omdbApiKey.trim()] : [];
   saveConfig(patch);
   res.json({ ...publicConfig(), drives: listDrives() });
 });
@@ -277,13 +279,16 @@ app.get('/api/scan/stream', async (_req, res) => {
 app.get('/api/enrich/stream', async (req, res) => {
   const send = sse(res);
   const cfg = loadConfig();
-  if (!cfg.omdbApiKey) {
+  if (!cfg.omdbApiKeys.length) {
     send('error', { message: 'No OMDb API key set. Add one in Settings (free at omdbapi.com).' });
     return res.end();
   }
 
   const force = req.query.force === '1';
   const lib = loadLibrary();
+  // One rotating pool for the whole run — once a key hits its daily cap we move
+  // on to the next and never come back to it this run.
+  const pool = createKeyPool(cfg.omdbApiKeys);
 
   // Build a unified task list: standalone movies + each series (one lookup per
   // show, not per episode).
@@ -308,8 +313,8 @@ app.get('/api/enrich/stream', async (req, res) => {
       // For series, ignore the parsed year — episode filenames often carry an
       // air year that mismatches the show (title-only is far more reliable).
       const r = t.type === 'series'
-        ? await fetchOmdb(cfg.omdbApiKey, ref.title, null, 'series')
-        : await fetchOmdb(cfg.omdbApiKey, ref.title, ref.year, 'movie');
+        ? await fetchOmdb(pool, ref.title, null, 'series')
+        : await fetchOmdb(pool, ref.title, ref.year, 'movie');
       if (r.found) {
         ref.imdb = r.info;
         ref.enriched = true;
@@ -320,18 +325,20 @@ app.get('/api/enrich/stream', async (req, res) => {
         ref.error = r.error || 'Not found';
       }
     } catch (err) {
-      ref.error = err.message || 'Lookup failed';
-      if (/HTTP 401|Invalid API key/i.test(ref.error)) {
+      // All keys used up (over quota / invalid) — stop with a clear message.
+      if (err && err.exhausted) {
         saveLibrary(lib);
-        send('error', { message: 'OMDb rejected the API key (401). Check it in Settings.' });
+        send('error', { message: `All ${pool.keys.length} OMDb key(s) are over their daily limit or invalid. Add another key in Settings, or try again tomorrow.` });
         return res.end();
       }
+      ref.error = err.message || 'Lookup failed';
     }
     done += 1;
     if (done % 5 === 0) saveLibrary(lib); // periodic checkpoint
     send('progress', {
       done, total: tasks.length, type: t.type,
       title: (ref.imdb && ref.imdb.title) || ref.title,
+      key: pool.idx + 1, keys: pool.keys.length,
     });
     await delay(120); // be gentle on the free tier
   }
@@ -345,12 +352,12 @@ app.get('/api/enrich/stream', async (req, res) => {
 app.post('/api/rematch', async (req, res) => {
   const { kind, id, key, imdb } = req.body || {};
   const cfg = loadConfig();
-  if (!cfg.omdbApiKey) return res.status(400).json({ error: 'No OMDb API key set.' });
+  if (!cfg.omdbApiKeys.length) return res.status(400).json({ error: 'No OMDb API key set.' });
   const imdbId = parseImdbId(imdb);
   if (!imdbId) return res.status(400).json({ error: 'Enter a valid IMDb id or URL, e.g. tt0306414.' });
 
   let r;
-  try { r = await fetchOmdbById(cfg.omdbApiKey, imdbId); }
+  try { r = await fetchOmdbById(createKeyPool(cfg.omdbApiKeys), imdbId); }
   catch (err) { return res.status(502).json({ error: err.message }); }
   if (!r.found) return res.status(404).json({ error: r.error || 'Not found on IMDb' });
 

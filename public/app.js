@@ -87,9 +87,12 @@ function renderAuth(st) {
 async function maybeApplyCloud(cloud) {
   if (!cloud) {
     // First sign-in with no saved settings yet — seed the account from what's
-    // configured here (the OMDb key isn't readable client-side, so it syncs the
-    // next time Settings is saved with a key entered).
-    window.MovieSync.save({ scanRoots: state.config.scanRoots, formats: state.config.formats });
+    // configured here (keys included, so they persist from now on).
+    window.MovieSync.save({
+      scanRoots: state.config.scanRoots,
+      formats: state.config.formats,
+      omdbApiKeys: state.config.omdbApiKeys || [],
+    });
     return;
   }
   if (!state.connected) { pendingCloudApply = cloud; return; } // apply once helper is up
@@ -100,7 +103,9 @@ async function applyCloudToHelper(cloud) {
   const body = {};
   if (Array.isArray(cloud.scanRoots)) body.scanRoots = cloud.scanRoots;
   if (Array.isArray(cloud.formats)) body.formats = cloud.formats;
-  if (typeof cloud.omdbApiKey === 'string' && cloud.omdbApiKey) body.omdbApiKey = cloud.omdbApiKey;
+  // New: array of keys. Legacy cloud docs used a single omdbApiKey string.
+  if (Array.isArray(cloud.omdbApiKeys)) body.omdbApiKeys = cloud.omdbApiKeys;
+  else if (typeof cloud.omdbApiKey === 'string' && cloud.omdbApiKey) body.omdbApiKeys = [cloud.omdbApiKey];
   if (!Object.keys(body).length) return;
   try {
     state.config = await api('/api/config', {
@@ -517,7 +522,10 @@ function startEnrich() {
     label: 'Fetching IMDb…',
     onEvent: async (d, es) => {
       if (d.event === 'start') setProgress(0, `Fetching IMDb data for ${d.count} titles…`);
-      else if (d.event === 'progress') setProgress(d.total ? d.done / d.total : null, `Fetching IMDb… ${d.done}/${d.total} — ${d.title || ''}`);
+      else if (d.event === 'progress') {
+        const keyNote = d.keys > 1 ? ` [key ${d.key}/${d.keys}]` : '';
+        setProgress(d.total ? d.done / d.total : null, `Fetching IMDb… ${d.done}/${d.total}${keyNote} — ${d.title || ''}`);
+      }
       else if (d.event === 'done') {
         endStream(es);
         await loadLibrary();
@@ -545,10 +553,11 @@ function setBusy(b) { $('scanBtn').disabled = b; $('enrichBtn').disabled = b || 
 function openSettings() {
   $('scanRoots').value = state.config.scanRoots.join('\n');
   $('formats').value = state.config.formats.join(', ');
-  $('omdbKey').value = '';
+  const keys = state.config.omdbApiKeys || [];
+  $('omdbKeys').value = keys.join('\n');
   const ks = $('keyStatus');
-  ks.textContent = state.config.hasApiKey ? '✓ A key is saved. Leave blank to keep it, or paste a new one.' : 'No key saved yet.';
-  ks.className = 'key-status ' + (state.config.hasApiKey ? 'ok' : 'no');
+  ks.textContent = keys.length ? `✓ ${keys.length} key${keys.length === 1 ? '' : 's'} saved.` : 'No key saved yet.';
+  ks.className = 'key-status ' + (keys.length ? 'ok' : 'no');
   $('drives').innerHTML = (state.config.drives || []).map((d) => `<span class="drive-chip" data-drive="${esc(d)}">${esc(d)}</span>`).join('');
   $('settingsModal').hidden = false;
 }
@@ -557,15 +566,13 @@ function closeSettings() { $('settingsModal').hidden = true; }
 async function saveSettings() {
   const scanRoots = $('scanRoots').value.split('\n').map((s) => s.trim()).filter(Boolean);
   const formats = $('formats').value.split(',').map((s) => s.trim()).filter(Boolean);
-  const key = $('omdbKey').value.trim();
-  const body = { scanRoots, formats };
-  if (key) body.omdbApiKey = key;
+  const omdbApiKeys = [...new Set($('omdbKeys').value.split('\n').map((s) => s.trim()).filter(Boolean))];
+  const body = { scanRoots, formats, omdbApiKeys };
   try {
     state.config = await api('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   } catch (err) { alert('Could not save settings: ' + err.message); return; }
-  // Also sync to the signed-in Google account (no-op if not signed in). The key
-  // is only written when the user actually typed one this save.
-  window.MovieSync?.save?.({ scanRoots, formats, omdbApiKey: key });
+  // Also sync the full settings (incl. keys) to the signed-in Google account.
+  window.MovieSync?.save?.({ scanRoots, formats, omdbApiKeys });
   closeSettings(); render();
   toast(window.MovieSync?.user ? 'Settings saved & synced to your account.' : 'Settings saved.');
 }

@@ -117,10 +117,11 @@
       <label class="field-label">File extensions <span class="hint">(comma separated)</span></label>
       <input type="text" id="formats" placeholder=".mkv" />
 
-      <label class="field-label">OMDb API key
-        <span class="hint">— free at <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer">omdbapi.com/apikey.aspx</a></span>
+      <label class="field-label">OMDb API keys <span class="hint">(one per line — free at
+        <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer">omdbapi.com/apikey.aspx</a>.
+        Add several; when one hits its 1000/day limit the app switches to the next automatically.)</span>
       </label>
-      <input type="password" id="omdbKey" placeholder="Paste key to enable IMDb details" autocomplete="off" />
+      <textarea id="omdbKeys" rows="3" placeholder="paste one or more keys, one per line" autocomplete="off" spellcheck="false"></textarea>
       <div class="key-status" id="keyStatus"></div>
 
       <div class="modal-actions">
