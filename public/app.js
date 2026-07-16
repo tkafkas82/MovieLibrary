@@ -5,7 +5,7 @@ const state = {
   movies: [],   // kind: 'movie'
   series: [],   // kind: 'series' (with .seasons[].episodes[])
   config: { scanRoots: [], formats: ['.mkv'], hasApiKey: false, drives: [] },
-  filters: { q: '', genre: '', sort: 'rating', minRating: 0, onlyUnmatched: false },
+  filters: { q: '', genre: '', sort: 'rating', onlyUnmatched: false },
   stream: null,
   connected: false,
   helperVersion: null,
@@ -240,12 +240,11 @@ function renderGenreOptions() {
 }
 
 function filtered() {
-  const { q, genre, sort, minRating, onlyUnmatched } = state.filters;
+  const { q, genre, sort, onlyUnmatched } = state.filters;
   const ql = q.toLowerCase();
   const list = allItems().filter((it) => {
     if (onlyUnmatched && it.imdb) return false;
     if (genre && !(it.imdb?.genre || '').toLowerCase().includes(genre.toLowerCase())) return false;
-    if (minRating > 0) { const r = parseFloat(it.imdb?.rating); if (!(r >= minRating)) return false; }
     if (ql) {
       const hay = `${it.title || ''} ${it.imdb?.title || ''} ${it.imdb?.director || ''} ${it.fileName || ''} ${it.series || ''}`.toLowerCase();
       if (!hay.includes(ql)) return false;
@@ -821,7 +820,6 @@ function wireEvents() {
   $('search').oninput = (e) => { state.filters.q = e.target.value; render(); };
   $('genre').onchange = (e) => { state.filters.genre = e.target.value; render(); };
   $('sort').onchange = (e) => { state.filters.sort = e.target.value; render(); };
-  $('minRating').oninput = (e) => { state.filters.minRating = +e.target.value; $('minRatingVal').textContent = e.target.value; render(); };
   $('onlyUnmatched').onchange = (e) => { state.filters.onlyUnmatched = e.target.checked; render(); };
 
   $('drives').onclick = (e) => {
