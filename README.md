@@ -213,6 +213,8 @@ Config is set from the in-app **Settings** panel and stored server-side in `data
 The server also honours a `PORT` environment variable (default `4700`).
 
 > 🔑 **Multiple keys + rotation.** Add several free OMDb keys and the app fails over automatically when one is exhausted or invalid. Keys live in `data/config.json` (git-ignored) and, if you sign in with Google, sync to your account so they follow you across machines. (They're exposed to the local page — necessary for that sync/management — but OMDb keys are free and low-value.)
+>
+> 🎁 **Works out of the box.** A shared **default key** (`DEFAULT_OMDB_KEYS` in `server.js`) is used automatically until you add your own, so enrichment works on first run. It's a single free key shared by everyone, so its 1,000/day limit is quickly exhausted — add your own in Settings for reliable, higher limits (the app tells you when it's on the default).
 
 ---
 

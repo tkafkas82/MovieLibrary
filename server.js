@@ -32,6 +32,13 @@ const VERSION = (typeof __APP_VERSION__ !== 'undefined') ? __APP_VERSION__ : (()
   try { return createRequire(import.meta.url)('./package.json').version; } catch { return 'dev'; }
 })();
 
+// A built-in OMDb key so enrichment works out of the box. It's used ONLY when
+// the user hasn't added any keys of their own (theirs take precedence). Being
+// a single free key shared by everyone, its 1000/day cap is easily exhausted —
+// the UI nudges users to add their own for reliability.
+const DEFAULT_OMDB_KEYS = ['48a56d4'];
+const effectiveKeys = (cfg) => (cfg.omdbApiKeys.length ? cfg.omdbApiKeys : DEFAULT_OMDB_KEYS);
+
 // Locate the static UI (`public/`). In dev it sits beside this file. As a
 // packaged binary the snapshot is read-only, so we look for a `public/` folder
 // on the real disk next to the executable. If none exists, the binary still
@@ -174,8 +181,17 @@ function groupedLibrary(lib) {
 }
 
 // ── config ──────────────────────────────────────────────────────────────
+// Public config for the UI, plus drives and default-key state. `hasApiKey` is
+// true when the built-in default is available even if the user has none, so
+// enrichment is enabled out of the box; `usingDefaultKey` lets the UI nudge.
+function configResponse() {
+  const pub = publicConfig();
+  const usingDefaultKey = pub.omdbApiKeys.length === 0 && DEFAULT_OMDB_KEYS.length > 0;
+  return { ...pub, drives: listDrives(), hasApiKey: pub.hasApiKey || usingDefaultKey, usingDefaultKey };
+}
+
 app.get('/api/config', (_req, res) => {
-  res.json({ ...publicConfig(), drives: listDrives() });
+  res.json(configResponse());
 });
 
 app.post('/api/config', (req, res) => {
@@ -193,7 +209,7 @@ app.post('/api/config', (req, res) => {
   if (Array.isArray(omdbApiKeys)) patch.omdbApiKeys = omdbApiKeys;
   else if (typeof omdbApiKey === 'string') patch.omdbApiKeys = omdbApiKey.trim() ? [omdbApiKey.trim()] : [];
   saveConfig(patch);
-  res.json({ ...publicConfig(), drives: listDrives() });
+  res.json(configResponse());
 });
 
 // ── library ─────────────────────────────────────────────────────────────
@@ -279,7 +295,8 @@ app.get('/api/scan/stream', async (_req, res) => {
 app.get('/api/enrich/stream', async (req, res) => {
   const send = sse(res);
   const cfg = loadConfig();
-  if (!cfg.omdbApiKeys.length) {
+  const keys = effectiveKeys(cfg);
+  if (!keys.length) {
     send('error', { message: 'No OMDb API key set. Add one in Settings (free at omdbapi.com).' });
     return res.end();
   }
@@ -288,7 +305,7 @@ app.get('/api/enrich/stream', async (req, res) => {
   const lib = loadLibrary();
   // One rotating pool for the whole run — once a key hits its daily cap we move
   // on to the next and never come back to it this run.
-  const pool = createKeyPool(cfg.omdbApiKeys);
+  const pool = createKeyPool(keys);
 
   // Build a unified task list: standalone movies + each series (one lookup per
   // show, not per episode).
@@ -352,12 +369,13 @@ app.get('/api/enrich/stream', async (req, res) => {
 app.post('/api/rematch', async (req, res) => {
   const { kind, id, key, imdb } = req.body || {};
   const cfg = loadConfig();
-  if (!cfg.omdbApiKeys.length) return res.status(400).json({ error: 'No OMDb API key set.' });
+  const keys = effectiveKeys(cfg);
+  if (!keys.length) return res.status(400).json({ error: 'No OMDb API key set.' });
   const imdbId = parseImdbId(imdb);
   if (!imdbId) return res.status(400).json({ error: 'Enter a valid IMDb id or URL, e.g. tt0306414.' });
 
   let r;
-  try { r = await fetchOmdbById(createKeyPool(cfg.omdbApiKeys), imdbId); }
+  try { r = await fetchOmdbById(createKeyPool(keys), imdbId); }
   catch (err) { return res.status(502).json({ error: err.message }); }
   if (!r.found) return res.status(404).json({ error: r.error || 'Not found on IMDb' });
 

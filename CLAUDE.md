@@ -82,6 +82,11 @@ cross-device sync would be meaningless.
    `omdbApiKeys` (an ARRAY; legacy single `omdbApiKey` is migrated in store.js).
    `publicConfig()` now RETURNS `omdbApiKeys` (they're low-value and the UI needs
    them to manage the list + sync to the user's Google account) plus `hasApiKey`.
+   A built-in `DEFAULT_OMDB_KEYS` in server.js is used by `effectiveKeys(cfg)`
+   ONLY when the user has none, so enrichment works out of the box;
+   `/api/config` reports `usingDefaultKey` so the UI can nudge users to add their
+   own. (The default is a single free key shared by everyone — public in the
+   repo/binary — so its 1000/day cap goes fast.)
 2. **Scan** (`GET /api/scan/stream`, SSE) — walks roots, adds new files to the
    library (parsed title/year, `enriched:false`), refreshes existing entries.
 3. **Fetch IMDb** (`GET /api/enrich/stream`, SSE) — for each un-enriched movie

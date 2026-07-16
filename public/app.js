@@ -556,8 +556,16 @@ function openSettings() {
   const keys = state.config.omdbApiKeys || [];
   $('omdbKeys').value = keys.join('\n');
   const ks = $('keyStatus');
-  ks.textContent = keys.length ? `✓ ${keys.length} key${keys.length === 1 ? '' : 's'} saved.` : 'No key saved yet.';
-  ks.className = 'key-status ' + (keys.length ? 'ok' : 'no');
+  if (keys.length) {
+    ks.textContent = `✓ ${keys.length} key${keys.length === 1 ? '' : 's'} saved.`;
+    ks.className = 'key-status ok';
+  } else if (state.config.usingDefaultKey) {
+    ks.textContent = 'Using a shared default key (limited 1,000/day for everyone). Add your own above for reliable, higher limits.';
+    ks.className = 'key-status no';
+  } else {
+    ks.textContent = 'No key saved yet.';
+    ks.className = 'key-status no';
+  }
   $('drives').innerHTML = (state.config.drives || []).map((d) => `<span class="drive-chip" data-drive="${esc(d)}">${esc(d)}</span>`).join('');
   $('settingsModal').hidden = false;
 }
