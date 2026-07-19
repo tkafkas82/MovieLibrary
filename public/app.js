@@ -414,6 +414,11 @@ function seriesCard(s) {
   const seasons = s.seasons.length;
   const unmatched = !im ? `<div class="badge-un">${s.error ? 'not found' : 'not matched'}</div>` : '';
   const director = im?.director ? `<div class="card-sub">🎬 ${esc(im.director)}</div>` : '';
+  // "Last played" chip — click to resume that episode straight from the card.
+  const last = state.readonly ? null : getLastEp(s.key);
+  const resume = last
+    ? `<button class="last-resume" data-act="resume-series" title="Resume ${esc(lastLabel(last))} — ${esc(last.fileName || '')}">▶ Resume · ${esc(lastLabel(last))}</button>`
+    : '';
   return `<div class="card series" data-key="${esc(s.key)}" data-kind="series">
     <div class="poster">${posterHtml(im)}${noimg(title)}${ratingBadge(im)}
       <div class="tv-badge">📺 SERIES</div>${unmatched}</div>
@@ -422,6 +427,7 @@ function seriesCard(s) {
       <div class="card-sub">${esc(String(year))} · ${seasons} season${seasons === 1 ? '' : 's'} · ${s.episodeCount} ep${s.episodeCount === 1 ? '' : 's'}</div>
       ${director}
       <div class="genres">${genreChips(im)}</div>
+      ${resume}
       <div class="actions">
         <button class="iconbtn" data-act="open-series" title="View seasons & episodes">View episodes</button>
         ${im?.imdbUrl ? `<a class="iconbtn" href="${esc(im.imdbUrl)}" target="_blank" rel="noreferrer">IMDb</a>` : ''}
@@ -430,19 +436,45 @@ function seriesCard(s) {
   </div>`;
 }
 
+// ── last-played episode memory ───────────────────────────────────────────────
+// Which episode was last launched per series, remembered locally on this PC
+// (the library lives on the helper; this is a lightweight per-device UI hint,
+// so localStorage keeps it out of the synced/read-only cloud lists).
+const LASTEP_KEY = 'movielib.lastEp.v1';
+function loadLastEp() { try { return JSON.parse(localStorage.getItem(LASTEP_KEY)) || {}; } catch { return {}; } }
+function getLastEp(seriesKey) { return loadLastEp()[seriesKey] || null; }
+function setLastEp(seriesKey, ep) {
+  if (!seriesKey || !ep) return;
+  const all = loadLastEp();
+  all[seriesKey] = { ...ep, ts: Date.now() };
+  try { localStorage.setItem(LASTEP_KEY, JSON.stringify(all)); } catch {}
+}
+function findEpById(s, epId) {
+  for (const sea of s.seasons) { const ep = sea.episodes.find((x) => x.id === epId); if (ep) return ep; }
+  return null;
+}
+// Short label for a remembered episode: "S01E03", "E03", or the filename.
+function lastLabel(l) {
+  if (l.season != null && l.episode != null) return `S${String(l.season).padStart(2, '0')}E${String(l.episode).padStart(2, '0')}`;
+  if (l.episode != null) return `E${String(l.episode).padStart(2, '0')}`;
+  return l.fileName || 'episode';
+}
+
 // ── series modal ────────────────────────────────────────────────────────────
 function openSeriesModal(s) {
   const im = s.imdb;
   const title = im?.title || s.title;
   const year = im?.year || s.year || '';
   const meta = [year, im?.runtime, im?.rated].filter(Boolean).map(esc).join(' · ');
+  const last = state.readonly ? null : getLastEp(s.key);
   const seasons = s.seasons.map((sea) => `
     <div class="season">
       <div class="season-head">${sea.season ? 'Season ' + sea.season : 'Episodes'} <span class="hint">(${sea.episodes.length})</span></div>
       ${sea.episodes.map((ep) => `
-        <div class="episode" data-id="${ep.id}">
+        <div class="episode${last && last.epId === ep.id ? ' last-played' : ''}" data-id="${ep.id}">
           <span class="ep-num">${ep.episode != null ? 'E' + String(ep.episode).padStart(2, '0') : '—'}</span>
           <span class="ep-name" title="${esc(ep.path || ep.fileName)}">${esc(ep.fileName)}</span>
+          <span class="last-badge" title="Last episode you played">▶ last played</span>
           ${state.readonly ? '' : `
           <button class="iconbtn tiny" data-act="play" title="Play">▶</button>
           <button class="iconbtn tiny" data-act="reveal" title="Show in Explorer">📁</button>`}
@@ -483,6 +515,14 @@ async function onGridClick(e) {
   if (cardEl.dataset.kind === 'series') {
     const s = state.series.find((x) => x.key === cardEl.dataset.key);
     if (!s) return;
+    // The "Resume" chip replays the last-played episode straight from the card.
+    if (btn && btn.dataset.act === 'resume-series') {
+      const last = getLastEp(s.key);
+      const ep = last && findEpById(s, last.epId);
+      if (!ep) { toast('That episode is no longer in the library — pick one from the list.'); openSeriesModal(s); return; }
+      playFile(btn, ep.path, ep.fileName);
+      return;
+    }
     // Clicking the poster/title or the "View episodes" button opens the modal.
     if (!btn || btn.dataset.act === 'open-series') { openSeriesModal(s); }
     return;
@@ -549,12 +589,23 @@ async function onSeriesModalClick(e) {
   const epEl = e.target.closest('.episode');
   if (!epEl) return;
   const id = epEl.dataset.id;
-  let path = null;
-  let fileName = null;
-  for (const s of state.series) for (const sea of s.seasons) { const ep = sea.episodes.find((x) => x.id === id); if (ep) { path = ep.path; fileName = ep.fileName; } }
+  let path = null, fileName = null, owner = null, epObj = null, seasonNum = null;
+  for (const s of state.series) for (const sea of s.seasons) {
+    const ep = sea.episodes.find((x) => x.id === id);
+    if (ep) { path = ep.path; fileName = ep.fileName; owner = s; epObj = ep; seasonNum = sea.season; }
+  }
   if (!path) return;
-  if (act === 'play') playFile(btn, path, fileName);
-  else if (act === 'reveal') post('/api/reveal', { path });
+  if (act === 'play') {
+    if (owner) {
+      setLastEp(owner.key, { epId: id, fileName, season: seasonNum, episode: epObj.episode });
+      // Move the "last played" highlight to this episode within the open modal…
+      const box = epEl.closest('.seasons');
+      if (box) box.querySelectorAll('.episode.last-played').forEach((el) => el.classList.remove('last-played'));
+      epEl.classList.add('last-played');
+      render(); // …and refresh the card behind it so its Resume chip updates.
+    }
+    playFile(btn, path, fileName);
+  } else if (act === 'reveal') post('/api/reveal', { path });
 }
 
 const post = (url, body) => fetch(H(url), {

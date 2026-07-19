@@ -175,9 +175,22 @@ a { color: var(--accent-2); }
   border: 1px solid transparent;
 }
 .episode:hover { background: var(--bg-3); border-color: var(--border); }
+.episode.last-played { background: rgba(245, 197, 24, .08); border-color: var(--accent); }
 .ep-num { flex: 0 0 44px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85em; }
 .ep-name { flex: 1; min-width: 0; font-size: .86em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.last-badge { display: none; flex: 0 0 auto; color: var(--accent); font-size: .68em; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px; }
+.episode.last-played .last-badge { display: inline-flex; }
 .iconbtn.tiny { flex: 0 0 auto; padding: 4px 9px; font-size: .9em; }
+
+/* "Last played" resume chip on the series card */
+.last-resume {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin: 2px 0;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: rgba(245, 197, 24, .1); color: var(--accent); border: 1px solid rgba(245, 197, 24, .35);
+  border-radius: 6px; padding: 3px 9px; font-size: .78em; font-weight: 700; cursor: pointer;
+}
+.last-resume:hover { background: rgba(245, 197, 24, .18); }
 
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
