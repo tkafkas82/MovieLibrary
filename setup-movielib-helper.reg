@@ -1,0 +1,16 @@
+Windows Registry Editor Version 5.00
+
+; === Movie Library Helper - Auto-start and Protocol Registration ===
+; Run this AFTER you've run movielibrary-helper.bat ONCE to cache the binary
+; Double-click and accept the UAC prompt
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary]
+@="URL:Movie Library Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary\shell\open\command]
+@="\"%LOCALAPPDATA%\MovieLibrary\movielibrary-helper-win-x64.exe\""
+
+; Auto-start on Windows login - helper runs in background (no browser popup)
+[HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run]
+"MovieLibraryHelper"="wscript.exe \"%LOCALAPPDATA%\MovieLibrary\run-hidden.vbs\""

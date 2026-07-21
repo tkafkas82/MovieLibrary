@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary]
+@="URL:Movie Library Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\movielibrary\shell\open\command]
+@="\"%LOCALAPPDATA%\\MovieLibrary\\movielibrary-helper-win-x64.exe\""
